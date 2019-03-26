@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <math.h>
+#include <time.h>
 #include "timer.h"
 #include "aux_declarations.h"
 
@@ -35,6 +36,9 @@ int main(const int argc, const char** argv) {
   bodyStruct *buf = (bodyStruct*)malloc(bytes);
 
   initialize_bodies(buf, nBodies); // Init mass / pos / vel / acc data 
+  printf("size of struct: %lu\n",sizeof(bodyStruct));
+  printf("%f %f %f %f %f %f %f %f %f %f\n",
+        buf[0].m, buf[0].x, buf[0].y, buf[0].z, buf[0].ax, buf[0].ay, buf[0].az,buf[0].vx, buf[0].vy, buf[0].vz);
 
   double timeStampA = getTimeStamp();
 
@@ -55,23 +59,27 @@ int main(const int argc, const char** argv) {
   double timeStampD = getTimeStamp();
 
   printf("Total interactions: %d\tTotal Time Taken: %lf\n",(nBodies*nBodies*nIters),        (timeStampD - timeStampA));
+  printf("%f %f %f %f %f %f %f %f %f %f\n",
+        buf[0].m, buf[0].x, buf[0].y, buf[0].z, buf[0].ax, buf[0].ay, buf[0].az,buf[0].vx, buf[0].vy, buf[0].vz);
 
   free(buf);
+  return 0;
 }
 
 void initialize_bodies(bodyStruct *b, int n) {
   int i = 0;
+  srand(time(0));
   for (i = 0; i < n; i++) {
     b[i].m = 1;
     b[i].x = 2.0f * ((rand() / (float)RAND_MAX) * 100.0f) - 100.0f;
     b[i].y = 2.0f * ((rand() / (float)RAND_MAX) * 100.0f) - 100.0f;
     b[i].z = 2.0f * ((rand() / (float)RAND_MAX) * 100.0f) - 100.0f;
-    b[i].ax = 0; 
-    b[i].ay = 0;
-    b[i].az = 0;
-    b[i].vx = 0;
-    b[i].vy = 0;
-    b[i].vz = 0;
+    b[i].ax = 0.0f; 
+    b[i].ay = 0.0f;
+    b[i].az = 0.0f;
+    b[i].vx = 0.0f;
+    b[i].vy = 0.0f;
+    b[i].vz = 0.0f;
   }
 }
 
