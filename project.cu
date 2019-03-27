@@ -37,7 +37,7 @@ void h_acce(float4* A, float3* B, int noElems){
                 r.y = A[j].y - A[i].y;
                 r.z = A[j].z - A[i].z;
 				
-				float distSqr = r.x * r.x + r.y * r.y + r.z * r.z;
+				float distSqr = r.x * r.x + r.y * r.y + r.z * r.z + 0.01;
                 float distSixth = distSqr * distSqr * distSqr;
                 float invDistCube = 1.0f/sqrtf(distSixth);
                 float s = A[j].w * invDistCube;
@@ -112,7 +112,7 @@ __device__ float3 bodyBodyInteraction(float4 bi, float4 bj, float3 ai)
     r.y = bj.y - bi.y;
     r.z = bj.z - bi.z;
 
-    float distSqr = r.x * r.x + r.y * r.y + r.z * r.z;
+    float distSqr = r.x * r.x + r.y * r.y + r.z * r.z + 0.01;
     float distSixth = distSqr * distSqr * distSqr;
     float invDistCube = 1.0f/sqrtf(distSixth);
     float s = bj.w * invDistCube;
@@ -198,9 +198,9 @@ void d_func(float4* d_X, float3 *d_V, float3* d_A, float4 *h_X, float dt, int no
 		
 		cudaMemcpy( h_X, d_X, noElems * sizeof(float4), cudaMemcpyDeviceToHost );
 		
-		FILE *f = fopen("position.txt", "w");
+		FILE *f = fopen("position2.txt", "w");
         for (int j = 0; j < noElems; j++)
-            fprintf(f, "%.6f %.6f %.6f\n", d_X[j].x, d_X[j].y, d_X[j].z);
+            fprintf(f, "%.6f %.6f %.6f\n", h_X[j].x, h_X[j].y, h_X[j].z);
         fclose(f);
 	}
 	
@@ -210,19 +210,17 @@ void d_func(float4* d_X, float3 *d_V, float3* d_A, float4 *h_X, float dt, int no
 int main( int argc, char *argv[] ) {
 	
     // get program arguments
-    if( argc != 3) {
+    if( argc < 2) {
         printf( "Error: wrong number of args\n" ) ;
         exit(0) ;
     }
-    int nx = atoi( argv[1] ) ; // nx is the number of columns
-    int ny = atoi( argv[2] ) ; // ny is the number of rows
-    int noElems = 30000 ;
+    int noElems = atoi(argv[1]);
 	float dt = 0.01;
-	int maxIteration = 10;
-    //int bytes = noElems * sizeof(int) ;
+	if (argc > 2) dt = atof(argv[2]);
+	int maxIteration = 5;
+	if (argc > 3) maxIteration = atof(argv[3]);
 	
     // alloc memory host-side
-    //int *h_A = (int *) malloc( bytes ) ;
 	float4 *h_X;
 	cudaError_t status = cudaMallocHost((void**)&h_X, noElems * sizeof(float4));
 	if (status != cudaSuccess){
