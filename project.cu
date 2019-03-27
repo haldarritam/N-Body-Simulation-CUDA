@@ -1,10 +1,24 @@
 #include <stdio.h>
 #include<sys/time.h>
+#include <pthread.h>
 
 #define MAX_INITIAL_WEIGHT 1000
 #define MAX_INITIAL_RANGE 10000
 #define MAX_INITIAL_VELOCITY 100
-#define BLOCK_DIM 32	
+#define EPS 1e-9f
+#define BLOCK_DIM 32
+
+pthread_mutex_t mutex_tid;
+
+typedef struct nbodyStruct{
+    int noElems;
+	int maxIteration;
+    int cur;
+    float dt;	
+    float4 *X;
+    float3 *A; 
+    float3 *V;	
+} nbodyStruct;	
 
 // time stamp function in seconds
 double getTimeStamp() {
@@ -28,68 +42,108 @@ void initData(float4 *A, float3 *V, int noElems){
 }
 
 // host-side acceleration compution
-void h_acce(float4* A, float3* B, int noElems){
+void* h_acce(void *arg){
+	nbodyStruct *n = (nbodyStruct *) arg;
+	float4 *X = n -> X;
+	float3 *A = n -> A;
+	int noElems = n -> noElems;
+	
+	pthread_mutex_lock(&mutex_tid);
+    int i = n->cur;
+    n->cur++;
+    pthread_mutex_unlock(&mutex_tid);
+	
 	float3 r;
-	for (int i = 0; i < noElems; i++)
+	{
+		A[i].x = 0.0f;
+		A[i].y = 0.0f;
+		A[i].z = 0.0f;
 	    for (int j = 0; j < noElems; j++)
-		    if (i != j){
-        	    r.x = A[j].x - A[i].x;
-                r.y = A[j].y - A[i].y;
-                r.z = A[j].z - A[i].z;
+		{
+        	r.x = X[j].x - X[i].x;
+            r.y = X[j].y - X[i].y;
+            r.z = X[j].z - X[i].z;
 				
-				float distSqr = r.x * r.x + r.y * r.y + r.z * r.z + 0.01;
-                float distSixth = distSqr * distSqr * distSqr;
-                float invDistCube = 1.0f/sqrtf(distSixth);
-                float s = A[j].w * invDistCube;
+		    float distSqr = r.x * r.x + r.y * r.y + r.z * r.z + EPS;
+            float distSixth = distSqr * distSqr * distSqr;
+            float invDistCube = 1.0f/sqrtf(distSixth);
+            float s = X[j].w * invDistCube;
 				
-                B[i].x += r.x * s;
-                B[i].y += r.y * s;
-                B[i].z += r.z * s;
-	        }
+            A[i].x += r.x * s;
+            A[i].y += r.y * s;
+            A[i].z += r.z * s;
+	    }			
+	}
+	return NULL;
 }
 
 // host-side preprocess the data
-void h_preprocess(float4* A, float3 *V, float3* B, float dt, int noElems){
-	h_acce(A, B, noElems);
+void h_preprocess(nbodyStruct *nbody, pthread_t *threads){
+	float3 *V = nbody -> V;
+	float3 *A = nbody -> A;
+	int noElems = nbody -> noElems;
+	float dt = nbody -> dt;
+	
+	nbody->cur = 0;
+	for (int i = 0; i < noElems; i++) 
+      pthread_create(&threads[i], NULL, h_acce, nbody);
+    for (int i = 0; i < noElems; i++) 
+      pthread_join(threads[i], NULL);
+	
 	for (int i = 0; i < noElems; i++){		
-		V[i].x += 0.5 * B[i].x * dt;
-		V[i].y += 0.5 * B[i].y * dt;
-		V[i].z += 0.5 * B[i].z * dt;
+		V[i].x += 0.5 * A[i].x * dt;
+		V[i].y += 0.5 * A[i].y * dt;
+		V[i].z += 0.5 * A[i].z * dt;
 	}	
 }
 
 // host-side integration
-void h_inte(float4* A, float3 *V, float3* B, float dt, int noElems){
+void h_inte(nbodyStruct *nbody, pthread_t *threads){
+	float4 *X = nbody -> X;
+	float3 *V = nbody -> V;
+	float3 *A = nbody -> A;
+	int noElems = nbody -> noElems;
+	float dt = nbody -> dt;
+	
 	for (int i = 0; i < noElems; i++){
-		A[i].x += V[i].x * dt;
-		A[i].y += V[i].y * dt;
-		A[i].z += V[i].z * dt;
+		X[i].x += V[i].x * dt;
+		X[i].y += V[i].y * dt;
+		X[i].z += V[i].z * dt;
 	}
+	
+	nbody->cur = 0;
+	for (int i = 0; i < noElems; i++) 
+      pthread_create(&threads[i], NULL, h_acce, nbody);
+    for (int i = 0; i < noElems; i++) 
+      pthread_join(threads[i], NULL);
 		
-	h_acce(A, B, noElems);
-		
-	for (int i = 0; i < noElems; i++){
-		
-		V[i].x += B[i].x * dt;
-		V[i].y += B[i].y * dt;
-		V[i].z += B[i].z * dt;
+	for (int i = 0; i < noElems; i++){		
+		V[i].x += A[i].x * dt;
+		V[i].y += A[i].y * dt;
+		V[i].z += A[i].z * dt;
 	}	
 }
 
 // host-side function
-void h_func(float4* A, float3 *V, float3* B, float dt, int noElems, int maxIteration){
-	double timeStampA = getTimeStamp() ;
+void h_func(nbodyStruct *nbody){
+	float4 *X = nbody -> X;
+	int noElems = nbody -> noElems;
+	int maxIteration = nbody -> maxIteration;
 	
-	h_preprocess(A, V, B, dt, noElems);
+	double timeStampA = getTimeStamp();
+	
+	pthread_t *threads = (pthread_t*) malloc(noElems * sizeof(pthread_t));
+	
+	h_preprocess(nbody, threads);
 	int i = 1;
 	
 	while (i < maxIteration){
 		i++;
-		h_inte(A, V, B, dt, noElems);
+		h_inte(nbody, threads);
 		
 		FILE *f = fopen("position.txt", "w");
         for (int j = 0; j < noElems; j++)
-            fprintf(f, "%.6f %.6f %.6f\n", A[j].x, A[j].y, A[j].z);
+            fprintf(f, "%.6f %.6f %.6f\n", X[j].x, X[j].y, X[j].z);
         fclose(f);
 	}
 	
@@ -112,7 +166,7 @@ __device__ float3 bodyBodyInteraction(float4 bi, float4 bj, float3 ai)
     r.y = bj.y - bi.y;
     r.z = bj.z - bi.z;
 
-    float distSqr = r.x * r.x + r.y * r.y + r.z * r.z + 0.01;
+    float distSqr = r.x * r.x + r.y * r.y + r.z * r.z + EPS;
     float distSixth = distSqr * distSqr * distSqr;
     float invDistCube = 1.0f/sqrtf(distSixth);
     float s = bj.w * invDistCube;
@@ -217,23 +271,31 @@ int main( int argc, char *argv[] ) {
     int noElems = atoi(argv[1]);
 	float dt = 0.01;
 	if (argc > 2) dt = atof(argv[2]);
-	int maxIteration = 5;
-	if (argc > 3) maxIteration = atof(argv[3]);
+	int maxIteration = 10;
+	if (argc > 3) maxIteration = atoi(argv[3]);
 	
-    // alloc memory host-side
+    // alloc memory host-side 
 	float4 *h_X;
 	cudaError_t status = cudaMallocHost((void**)&h_X, noElems * sizeof(float4));
 	if (status != cudaSuccess){
         printf("Error: allocating pinned host memory\n");
 		exit(0);
 	}
-    float3 *h_A = (float3 *) malloc( noElems * sizeof(float3) ) ; 	
+    float3 *h_A = (float3 *) malloc( noElems * sizeof(float3) ); 	
 	float3 *h_V;
 	status = cudaMallocHost((void**)&h_V, noElems * sizeof(float3));
 	if (status != cudaSuccess){
         printf("Error: allocating pinned host memory\n");
 		exit(0);
 	}
+	nbodyStruct *h_nbody = (nbodyStruct*) malloc(sizeof(nbodyStruct));
+	h_nbody->noElems = noElems;
+	h_nbody->maxIteration = maxIteration;
+	h_nbody->dt = dt;
+	h_nbody->X = h_X;
+	h_nbody->A = h_A;
+	h_nbody->V = h_V;
+	
 	
     // init matrices with random data
     initData(h_X, h_V, noElems) ; 
@@ -249,7 +311,7 @@ int main( int argc, char *argv[] ) {
 	cudaMemcpy( d_X, h_X, noElems * sizeof(float4), cudaMemcpyHostToDevice );
     cudaMemcpy( d_V, h_V, noElems * sizeof(float3), cudaMemcpyHostToDevice );
 	
-    h_func(h_X, h_V, h_A, dt, noElems, maxIteration);
+    h_func(h_nbody);
 	d_func(d_X, d_V, d_A, h_X, dt, noElems, maxIteration);
 	
 	// verification
