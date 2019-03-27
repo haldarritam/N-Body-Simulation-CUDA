@@ -8,7 +8,7 @@
 
 
 // global constants
-#define NUM_THREADS 8
+#define NUM_THREADS 128
 #define MAX_MASS 100.0f
 #define MAX_POS_X 1000.0f
 #define MAX_POS_Y 1000.0f
@@ -16,9 +16,9 @@
 #define MAX_VEL_Y 0.0f
 #define G 8
 #define DT 0.0625f
-#define DT2 0.015625f/2
+#define DT2 0.00390625f/2
 #define DAMPING 1.0f
-#define SOFTENING 0.01
+#define SOFTENING 0.015625f
 
 typedef struct {
 	float *m;
@@ -34,12 +34,13 @@ pthread_cond_t count_condition = PTHREAD_COND_INITIALIZER;
 unsigned long count = 0;
 
 
-double getTimeStamp ()
-{
+// time stamp function in seconds 
+double getTimeStamp()
+{     
     struct timeval tv;
-    gettimeofday (&tv, NULL);
-    return ((double) tv.tv_usec/1000000 + (double) tv.tv_usec);
-}
+	gettimeofday (&tv, NULL);
+	return (double) tv.tv_usec/1000000 + tv.tv_sec ;
+} 
 
 void initObjectSpecs (float *m, float *r, float *v, float *a, const unsigned long nElem)
 {
@@ -124,8 +125,8 @@ void *computeHost_Multithread (void *arg)
 		// calculating NEXT position of each body
 	    for (i=start; i<end; i++)
 	    {
-	        *(*o_r + 2*i)   = *(*i_r + 2*i)   + *(*i_v + 2*i)*DT   + *(*i_a + 2*i)  *DT2/2;
-	        *(*o_r + 2*i+1) = *(*i_r + 2*i+1) + *(*i_v + 2*i+1)*DT + *(*i_a + 2*i+1)*DT2/2;
+	        *(*o_r + 2*i)   = *(*i_r + 2*i)   + *(*i_v + 2*i)*DT   + *(*i_a + 2*i)  *DT2;
+	        *(*o_r + 2*i+1) = *(*i_r + 2*i+1) + *(*i_v + 2*i+1)*DT + *(*i_a + 2*i+1)*DT2;
 	    }
 
 	    // calculating NEXT acceleration of each body from the position of every other bodies
@@ -236,6 +237,8 @@ int main(int argc, char const *argv[])
     pthread_attr_init (&attr);
     pthread_attr_setdetachstate (&attr, PTHREAD_CREATE_JOINABLE);
 
+
+	double time1 = getTimeStamp();
     // creating the threads
     for (i=0; i<NUM_THREADS; i++) {
     	rc = pthread_create (&threads[i], &attr, computeHost_Multithread, (void *) i);
@@ -256,6 +259,9 @@ int main(int argc, char const *argv[])
     	// 	i, (long) status);
     }
 
+	double time2 = getTimeStamp();
+	double elapsedTime = time2-time1;
+
 
     free (m);
     free (r1); free (r2);
@@ -265,7 +271,11 @@ int main(int argc, char const *argv[])
 	pthread_attr_destroy (&attr);
     pthread_mutex_destroy (&count_mutex);
     pthread_cond_destroy (&count_condition);
-    pthread_exit (NULL);
+   
+	printf("\nElapsed Time: %lfs\n", elapsedTime);
+	printf("Average timestep simulation duration: %lfs\n", elapsedTime/nIter); 
+
+	pthread_exit (NULL);
 
     return 0;
 }
