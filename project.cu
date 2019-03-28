@@ -6,6 +6,7 @@
 #define MAX_INITIAL_RANGE 10000
 #define MAX_INITIAL_VELOCITY 100
 #define EPS 1e-9f
+#define NUM_THREADS 32
 #define BLOCK_DIM 32
 
 pthread_mutex_t mutex_tid;
@@ -47,13 +48,16 @@ void* h_acce(void *arg){
 	float4 *X = n -> X;
 	float3 *A = n -> A;
 	int noElems = n -> noElems;
+	int len = noElems / NUM_THREADS + 1;
 	
 	pthread_mutex_lock(&mutex_tid);
-    int i = n->cur;
+    int start = n->cur * len;
+	int end = start + len < noElems? start + len : noElems;
     n->cur++;
     pthread_mutex_unlock(&mutex_tid);
 	
 	float3 r;
+	for (int i = start; i < end; i++)
 	{
 		A[i].x = 0.0f;
 		A[i].y = 0.0f;
@@ -85,9 +89,9 @@ void h_preprocess(nbodyStruct *nbody, pthread_t *threads){
 	float dt = nbody -> dt;
 	
 	nbody->cur = 0;
-	for (int i = 0; i < noElems; i++) 
+	for (int i = 0; i < NUM_THREADS; i++) 
       pthread_create(&threads[i], NULL, h_acce, nbody);
-    for (int i = 0; i < noElems; i++) 
+    for (int i = 0; i < NUM_THREADS; i++) 
       pthread_join(threads[i], NULL);
 	
 	for (int i = 0; i < noElems; i++){		
@@ -97,31 +101,71 @@ void h_preprocess(nbodyStruct *nbody, pthread_t *threads){
 	}	
 }
 
-// host-side integration
-void h_inte(nbodyStruct *nbody, pthread_t *threads){
-	float4 *X = nbody -> X;
-	float3 *V = nbody -> V;
-	float3 *A = nbody -> A;
-	int noElems = nbody -> noElems;
-	float dt = nbody -> dt;
+void* h_updatePosition(void *arg){
+	nbodyStruct *n = (nbodyStruct *) arg;
+	float4 *X = n -> X;
+	float3 *V = n -> V;
+	int noElems = n -> noElems;
+	float dt = n -> dt;
+	int len = (noElems - 1) / NUM_THREADS + 1;
 	
-	for (int i = 0; i < noElems; i++){
+	pthread_mutex_lock(&mutex_tid);
+    int start = n->cur * len;
+	int end = start + len < noElems? start + len : noElems;
+    n->cur++;
+    pthread_mutex_unlock(&mutex_tid);
+	
+	for (int i = start; i < end; i++)
+	{
 		X[i].x += V[i].x * dt;
 		X[i].y += V[i].y * dt;
-		X[i].z += V[i].z * dt;
+		X[i].z += V[i].z * dt;			
 	}
+	return NULL;
+}
+
+void* h_updateVelocity(void *arg){
+	nbodyStruct *n = (nbodyStruct *) arg;
+	float3 *A = n -> A;
+	float3 *V = n -> V;
+	int noElems = n -> noElems;
+	float dt = n -> dt;
+	int len = noElems / NUM_THREADS + 1;
 	
-	nbody->cur = 0;
-	for (int i = 0; i < noElems; i++) 
-      pthread_create(&threads[i], NULL, h_acce, nbody);
-    for (int i = 0; i < noElems; i++) 
-      pthread_join(threads[i], NULL);
-		
-	for (int i = 0; i < noElems; i++){		
+	pthread_mutex_lock(&mutex_tid);
+    int start = n->cur * len;
+	int end = start + len < noElems? start + len : noElems;
+    n->cur++;
+    pthread_mutex_unlock(&mutex_tid);
+	
+	for (int i = start; i < end; i++)
+	{
 		V[i].x += A[i].x * dt;
 		V[i].y += A[i].y * dt;
-		V[i].z += A[i].z * dt;
-	}	
+		V[i].z += A[i].z * dt;		
+	}
+	return NULL;
+}
+
+// host-side integration
+void h_inte(nbodyStruct *nbody, pthread_t *threads){	
+	nbody->cur = 0;
+	for (int i = 0; i < NUM_THREADS; i++) 
+      pthread_create(&threads[i], NULL, h_updatePosition, nbody);
+    for (int i = 0; i < NUM_THREADS; i++) 
+      pthread_join(threads[i], NULL);
+	
+	nbody->cur = 0;
+	for (int i = 0; i < NUM_THREADS; i++) 
+      pthread_create(&threads[i], NULL, h_acce, nbody);
+    for (int i = 0; i < NUM_THREADS; i++) 
+      pthread_join(threads[i], NULL);
+		
+	nbody->cur = 0;
+	for (int i = 0; i < NUM_THREADS; i++) 
+      pthread_create(&threads[i], NULL, h_updateVelocity, nbody);
+    for (int i = 0; i < NUM_THREADS; i++) 
+      pthread_join(threads[i], NULL);	
 }
 
 // host-side function
@@ -132,7 +176,7 @@ void h_func(nbodyStruct *nbody){
 	
 	double timeStampA = getTimeStamp();
 	
-	pthread_t *threads = (pthread_t*) malloc(noElems * sizeof(pthread_t));
+	pthread_t *threads = (pthread_t*) malloc(NUM_THREADS * sizeof(pthread_t));
 	
 	h_preprocess(nbody, threads);
 	int i = 1;
