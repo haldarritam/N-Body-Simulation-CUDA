@@ -8,7 +8,7 @@
 
 
 // global constants
-#define NUM_THREADS 128
+#define NUM_THREADS 256
 #define MAX_MASS 100.0f
 #define MAX_POS_X 1000.0f
 #define MAX_POS_Y 1000.0f
@@ -39,52 +39,75 @@ double getTimeStamp()
 {     
     struct timeval tv;
 	gettimeofday (&tv, NULL);
-	return (double) tv.tv_usec/1000000 + tv.tv_sec ;
+	return (double) tv.tv_usec/1000000 + tv.tv_sec;
 } 
 
-void initObjectSpecs (float *m, float *r, float *v, float *a, const unsigned long nElem)
+void init_MassPositionVelocity ()
 {
-    // generate different seed for random number
+    // generate different seed for pseudo-random number generator
     time_t t;
-    srand((unsigned int) time(&t));
+    srand ((unsigned int) time(&t));
 
-    // populating position and velocity vectors
-    unsigned int idx;
-    for (idx=0; idx<nElem; idx++)
+    // define local variables for convenience
+    unsigned long nElem = US.nElem;
+
+    // populating mass, position, & velocity arrays
+    unsigned long idx;
+    for (idx=0; idx<nElem; idx++) 
     {
-        m[idx]     = (float) ((double) rand() / (double) (RAND_MAX/MAX_MASS));
-        r[2*idx]   = (float) ((double) rand() / (double) (RAND_MAX/(MAX_POS_X*2)) - MAX_POS_X);
-        r[2*idx+1] = (float) ((double) rand() / (double) (RAND_MAX/(MAX_POS_Y*2)) - MAX_POS_Y);
-        v[2*idx]   = (float) ((double) rand() / (double) (RAND_MAX/(MAX_VEL_X*2)) - MAX_VEL_X);
-        v[2*idx+1] = (float) ((double) rand() / (double) (RAND_MAX/(MAX_VEL_Y*2)) - MAX_VEL_Y);
+        US.m[idx]     = (float) ((double) rand() / (double) (RAND_MAX/MAX_MASS));
+        US.r1[2*idx]   = (float) ((double) rand() / (double) (RAND_MAX/(MAX_POS_X*2)) - MAX_POS_X);
+        US.r1[2*idx+1] = (float) ((double) rand() / (double) (RAND_MAX/(MAX_POS_Y*2)) - MAX_POS_Y);
+        US.v1[2*idx]   = (float) ((double) rand() / (double) (RAND_MAX/(MAX_VEL_X*2)) - MAX_VEL_X);
+        US.v1[2*idx+1] = (float) ((double) rand() / (double) (RAND_MAX/(MAX_VEL_Y*2)) - MAX_VEL_Y);
     }
+}
 
-    // computing initial acceleration on each body from the position of every other body
-    unsigned int i, j;
-    float dx, dy, rDistSquared, invDistCubed;
-    float ax, ay;
-    for (i=0; i<nElem; i++)
+void *init_Acceleration_SMT (void *arg)
+{
+    // define local variables for convenience
+    unsigned long start, end, len, offset, nElem;
+
+    nElem = US.nElem;
+    offset = (unsigned long) arg;
+    len = (unsigned long) US.nElem / NUM_THREADS;
+    start = offset * len;
+    end = start + len;
+
+    unsigned long i, j;
+    float ax_ip1, ay_ip1;
+    float dx_ip1, dy_ip1, rDistSquared, invDistCubed;
+    float **i_r = &US.r1;
+    float **o_a = &US.a1;
+
+    // calculating NEXT acceleration of each body from the position of every other bodies
+    // ... and NEXT velocity of each body utilizing the next acceleration
+    for (i=start; i<end; i++)
     {
-        ax = 0.0;
-        ay = 0.0;
+        ax_ip1 = 0.0;
+        ay_ip1 = 0.0;
         for (j=0; j<nElem; j++)
         {
             if (j != i)
             {
-                dx = r[2*j] - r[2*i];
-                dy = r[2*j+1] - r[2*i+1];
-                rDistSquared = dx*dx + dy*dy + SOFTENING;
-                invDistCubed = G*m[j]/sqrtf(rDistSquared*rDistSquared*rDistSquared);
-                ax += dx * invDistCubed;
-                ay += dy * invDistCubed;
+                dx_ip1 = *(*i_r + 2*j)   - *(*i_r + 2*i);
+                dy_ip1 = *(*i_r + 2*j+1) - *(*i_r + 2*i+1);
+                rDistSquared = dx_ip1*dx_ip1 + dy_ip1*dy_ip1 + SOFTENING;
+                invDistCubed = G*US.m[j]/sqrtf(rDistSquared*rDistSquared*rDistSquared);
+                ax_ip1 += dx_ip1 * invDistCubed;
+                ay_ip1 += dy_ip1 * invDistCubed;
             }
         }
-        a[2*i]   = ax;
-        a[2*i+1] = ay;
+
+        *(*o_a + 2*i)   = ax_ip1;
+        *(*o_a + 2*i+1) = ay_ip1;
     }
+
+    pthread_exit (NULL);
 }
 
-void *computeHost_Multithread (void *arg)
+
+void *computeHost_SMT (void *arg)
 {
 	// define local variables for convenience
 	unsigned long start, end, len, offset, nElem, nIter;
@@ -98,8 +121,7 @@ void *computeHost_Multithread (void *arg)
 
 	unsigned long i, j;
     float ax_ip1, ay_ip1;
-    float dx_ip1, dy_ip1, rDistSquared;
-    float invDistCubed;
+    float dx_ip1, dy_ip1, rDistSquared, invDistCubed;
 	float **i_r, **i_v, **i_a;
 	float **o_r, **o_v, **o_a;
 	for (unsigned long iter=0; iter<nIter; iter++) {
@@ -173,7 +195,7 @@ void *computeHost_Multithread (void *arg)
 		pthread_mutex_unlock (&count_mutex);
 
 		if (offset == 0)
-			printf("%.4f\t%.4f\t\t%.4f\t%.4f\n", US.r1[0], US.r1[1], US.r2[0], US.r2[1]);
+			printf("x: %.4f\ty: %.4f\n", **o_r, *(*o_r+1));
 	}
 
 	pthread_exit (NULL);
@@ -182,8 +204,7 @@ void *computeHost_Multithread (void *arg)
 
 int main(int argc, char const *argv[])
 {
-    if (argc != 3)
-    {
+    if (argc > 3) {
         printf("Error: Wrong number of args. Exiting.\n");
         exit(1);
     }
@@ -192,8 +213,19 @@ int main(int argc, char const *argv[])
     int rc;
     void *status;
     char *ptr1, *ptr2;
-    unsigned long nElem = strtoul(argv[1], &ptr1, 10);  // number of elements
-    unsigned long nIter = strtoul(argv[2], &ptr2, 10);  // number of simulation time steps
+
+    unsigned long nElem = 16000;    // argv[1]: number of elements
+    unsigned long nIter = 10;      // argv[2]: number of simulation time steps
+    if (argc > 0)
+        nElem = strtoul(argv[1], &ptr1, 10);
+    if (argc > 1)
+        nIter = strtoul(argv[2], &ptr2, 10);  
+
+    printf("\n===== Simulation Parameters =====\n\n");
+    printf("  Number of Bodies = %ld\n", nElem);
+    printf("  Number of Time Steps = %ld\n", nIter);
+    printf("  Number of CPU Threads = %d\n\n", NUM_THREADS);
+    printf("=================================\n\n");
 
     size_t nBytes = nElem * sizeof(float);
 
@@ -214,7 +246,6 @@ int main(int argc, char const *argv[])
     memset (v2, 0, nBytes*2);
     memset (a1, 0, nBytes*2);
     memset (a2, 0, nBytes*2);
-    initObjectSpecs (m, r1, v1, a1, nElem);
 
     US.m = m;
     US.r1 = r1;
@@ -226,6 +257,9 @@ int main(int argc, char const *argv[])
     US.nElem = nElem;
     US.nIter = nIter;
 
+    printf("Initializing bodies. Time taken: ");
+    double time0 = getTimeStamp();
+    init_MassPositionVelocity();
 
     // initialize mutex and condition variable objects
     pthread_mutex_init (&count_mutex, NULL);
@@ -238,10 +272,32 @@ int main(int argc, char const *argv[])
     pthread_attr_setdetachstate (&attr, PTHREAD_CREATE_JOINABLE);
 
 
+    // creating the threads
+    for (i=0; i<NUM_THREADS; i++) {
+        rc = pthread_create (&threads[i], &attr, init_Acceleration_SMT, (void *) i);
+        if (rc) {
+            printf("Error; return code from pthread_create() is %d.\n", rc);
+            exit(EXIT_FAILURE);
+        }
+    }
+
+    // wait on the other threads
+    for (i=0; i<NUM_THREADS; i++) {
+        rc = pthread_join (threads[i], &status);
+        if (rc) {
+            printf("ERROR; return code from pthread_join() is %d.\n", rc);
+            exit(EXIT_FAILURE);
+        }
+        // printf("main(): completed join with thread #%ld having status of %ld\n",
+        //  i, (long) status);
+    }
+    printf ("%lfs\n", getTimeStamp()-time0);
+
+    printf("\nBeginning CPU simulation ...\n");
 	double time1 = getTimeStamp();
     // creating the threads
     for (i=0; i<NUM_THREADS; i++) {
-    	rc = pthread_create (&threads[i], &attr, computeHost_Multithread, (void *) i);
+    	rc = pthread_create (&threads[i], &attr, computeHost_SMT, (void *) i);
     	if (rc) {
     		printf("Error; return code from pthread_create() is %d.\n", rc);
     		exit(EXIT_FAILURE);
