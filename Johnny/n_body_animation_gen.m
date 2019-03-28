@@ -12,6 +12,8 @@ for i=1:time_step;
     end
 end
 
+fclose(fp);
+
 for i=1:time_step;
     tic
     %scatter3(pos(1,:,i),pos(2,:,i),pos(3,:,i))
@@ -30,6 +32,6 @@ video=VideoWriter('demo','MPEG-4')
 video.FrameRate=3.5
 open(video)
 writeVideo(video,F)
-
 close(video)
+
 
