@@ -48,23 +48,23 @@ double getTimeStamp()
 
 void init_MassPositionVelocity ()
 {
-    // generate different seed for pseudo-random number generator
-    time_t t;
-    srand ((unsigned int) time(&t));
+	// generate different seed for pseudo-random number generator
+	time_t t;
+	srand ((unsigned int) time(&t));
 
-    // define local variables for convenience
-    unsigned long nElem = system.nElem;
+	// define local variables for convenience
+	unsigned long nElem = system.nElem;
 
-    // populating mass, position, & velocity arrays
-    unsigned long idx;
-    for (idx=0; idx<nElem; idx++) 
-    {
-        system.m[idx]     = (float) ((double) rand() / (double) (RAND_MAX/MAX_MASS));
-        system.r1[2*idx]   = (float) ((double) rand() / (double) (RAND_MAX/(MAX_POS_X*2)) - MAX_POS_X);
-        system.r1[2*idx+1] = (float) ((double) rand() / (double) (RAND_MAX/(MAX_POS_Y*2)) - MAX_POS_Y);
-        system.v1[2*idx]   = (float) ((double) rand() / (double) (RAND_MAX/(MAX_VEL_X*2)) - MAX_VEL_X);
-        system.v1[2*idx+1] = (float) ((double) rand() / (double) (RAND_MAX/(MAX_VEL_Y*2)) - MAX_VEL_Y);
-    }
+	// populating mass, position, & velocity arrays
+	unsigned long idx;
+	for (idx=0; idx<nElem; idx++) 
+	{
+		system.m[idx]     = (float) ((double) rand() / (double) (RAND_MAX/MAX_MASS));
+		system.r1[2*idx]   = (float) ((double) rand() / (double) (RAND_MAX/(MAX_POS_X*2)) - MAX_POS_X);
+		system.r1[2*idx+1] = (float) ((double) rand() / (double) (RAND_MAX/(MAX_POS_Y*2)) - MAX_POS_Y);
+		system.v1[2*idx]   = (float) ((double) rand() / (double) (RAND_MAX/(MAX_VEL_X*2)) - MAX_VEL_X);
+		system.v1[2*idx+1] = (float) ((double) rand() / (double) (RAND_MAX/(MAX_VEL_Y*2)) - MAX_VEL_Y);
+	}
 }
 
 void *init_Acceleration_SMT (void *arg)
@@ -111,7 +111,11 @@ void *init_Acceleration_SMT (void *arg)
 }
 
 
-//__global__ init_Acceleration (unsigned long nElem, unsigned long nIter)
+__global__ void compute_Device (float *o_r, float *o_v, float *o_a, 
+	float *i_r, float *i_v, float *i_a, float *m, const unsigned long nElem)
+{
+	unsigned int tid = blockIdx.x * blockDim.x + threadIdx.x;
+}
 
 
 int main (int argc, char *argv[])
@@ -194,63 +198,78 @@ int main (int argc, char *argv[])
 	memset (h_a2, 0, nBytes*2);
 
 	// initialize data on host size and then transfer to device
-    system.m = h_m;
-    system.r1 = h_r1;
-    system.r2 = h_r2;
-    system.v1 = h_v1;
-    system.v2 = h_v2;
-    system.a1 = h_a1;
-    system.a2 = h_a2;
-    system.nElem = nElem;
-    system.nIter = nIter;
+	system.m = h_m;
+	system.r1 = h_r1;
+	system.r2 = h_r2;
+	system.v1 = h_v1;
+	system.v2 = h_v2;
+	system.a1 = h_a1;
+	system.a2 = h_a2;
+	system.nElem = nElem;
+	system.nIter = nIter;
 
-    printf("Initializing bodies on HOST. Time taken: ");
-    double time0 = getTimeStamp();
-    init_MassPositionVelocity();
+	printf("Initializing bodies on HOST. Time taken: ");
+	double time0 = getTimeStamp();
+	init_MassPositionVelocity();
 
-    // for portability, explicity create threads in a joinable state
-    pthread_t threads [NUM_CPU_THREADS];
-    pthread_attr_t attr;
-    pthread_attr_init (&attr);
-    pthread_attr_setdetachstate (&attr, PTHREAD_CREATE_JOINABLE);
+	// for portability, explicity create threads in a joinable state
+	pthread_t threads [NUM_CPU_THREADS];
+	pthread_attr_t attr;
+	pthread_attr_init (&attr);
+	pthread_attr_setdetachstate (&attr, PTHREAD_CREATE_JOINABLE);
 
-    // creating the threads to calculate initial body accelerations on HOST
-    for (i=0; i<NUM_CPU_THREADS; i++) {
-        rc = pthread_create (&threads[i], &attr, init_Acceleration_SMT, (void *) i);
-        if (rc) {
-            printf("Error; return code from pthread_create() is %d.\n", rc);
-            exit(EXIT_FAILURE);
-        }
-    }
+	// creating the threads to calculate initial body accelerations on HOST
+	for (i=0; i<NUM_CPU_THREADS; i++) {
+		rc = pthread_create (&threads[i], &attr, init_Acceleration_SMT, (void *) i);
+		if (rc) {
+			printf("Error; return code from pthread_create() is %d.\n", rc);
+			exit(EXIT_FAILURE);
+		}
+	}
 
-    // wait on the other threads after initial body accelerations on HOST
-    for (i=0; i<NUM_CPU_THREADS; i++) {
-        rc = pthread_join (threads[i], &status);
-        if (rc) {
-            printf("ERROR; return code from pthread_join() is %d.\n", rc);
-            exit(EXIT_FAILURE);
-        }
-    }
-    printf ("%lfs\n", getTimeStamp()-time0);
+	// wait on the other threads after initial body accelerations on HOST
+	for (i=0; i<NUM_CPU_THREADS; i++) {
+		rc = pthread_join (threads[i], &status);
+		if (rc) {
+			printf("ERROR; return code from pthread_join() is %d.\n", rc);
+			exit(EXIT_FAILURE);
+		}
+	}
+	printf ("%lfs\n", getTimeStamp()-time0);
 
-    // allocating space in device global memory for data
-    checkCudaErrors (cudaMalloc ((void**) &d_m, nBytes));
-    checkCudaErrors (cudaMalloc ((void**) &d_r1, nBytes*2));
-    checkCudaErrors (cudaMalloc ((void**) &d_r2, nBytes*2));
-    checkCudaErrors (cudaMalloc ((void**) &d_v1, nBytes*2));
-    checkCudaErrors (cudaMalloc ((void**) &d_v2, nBytes*2));
-    checkCudaErrors (cudaMalloc ((void**) &d_a1, nBytes*2));
-    checkCudaErrors (cudaMalloc ((void**) &d_a2, nBytes*2));
+	// allocating space in device global memory for data
+	checkCudaErrors (cudaMalloc ((void**) &d_m, nBytes));
+	checkCudaErrors (cudaMalloc ((void**) &d_r1, nBytes*2));
+	checkCudaErrors (cudaMalloc ((void**) &d_r2, nBytes*2));
+	checkCudaErrors (cudaMalloc ((void**) &d_v1, nBytes*2));
+	checkCudaErrors (cudaMalloc ((void**) &d_v2, nBytes*2));
+	checkCudaErrors (cudaMalloc ((void**) &d_a1, nBytes*2));
+	checkCudaErrors (cudaMalloc ((void**) &d_a2, nBytes*2));
 
-    // copying initialized data from host to device
-    checkCudaErrors (cudaMemcpy (d_m, h_m, nBytes, cudaMemcopyHostToDevice));
-    checkCudaErrors (cudaMemcpy (d_r1, h_r1, nBytes*2, cudaMemcopyHostToDevice));
+	// copying initialized data from host to device
+	checkCudaErrors (cudaMemcpy (d_m, h_m, nBytes, cudaMemcopyHostToDevice));
+	checkCudaErrors (cudaMemcpy (d_r1, h_r1, nBytes*2, cudaMemcopyHostToDevice));
 	checkCudaErrors (cudaMemcpy (d_r2, h_r2, nBytes*2, cudaMemcopyHostToDevice));
 	checkCudaErrors (cudaMemcpy (d_v1, h_v1, nBytes*2, cudaMemcopyHostToDevice));
 	checkCudaErrors (cudaMemcpy (d_v2, h_v2, nBytes*2, cudaMemcopyHostToDevice));
-    checkCudaErrors (cudaMemcpy (d_a1, h_a1, nBytes*2, cudaMemcopyHostToDevice));
-    checkCudaErrors (cudaMemcpy (d_a2, h_a2, nBytes*2, cudaMemcopyHostToDevice));
+	checkCudaErrors (cudaMemcpy (d_a1, h_a1, nBytes*2, cudaMemcopyHostToDevice));
+	checkCudaErrors (cudaMemcpy (d_a2, h_a2, nBytes*2, cudaMemcopyHostToDevice));
 
+	////////////////////////////////////////////////////////////////
+	/// PERFORMING SIMULATION ON DEVICE
+	////////////////////////////////////////////////////////////////
+
+	dim3 block (1024);
+	dim3 grid ((nElem+block.x-1)/(block.x));
+	for (unsigned long iter=0; iter<nIter; iter++) {
+		if (iter % 2 == 0) {
+
+			cudaDeviceSynchronize ();
+		} else {
+
+			cudaDeviceSynchronize ();
+		}
+	}
 
 
 
@@ -259,20 +278,20 @@ int main (int argc, char *argv[])
 	/// SIMULATION COMPLETE
 	////////////////////////////////////////////////////////////////
 
-    cudaFree (d_m);
-    cudaFree (d_r1); cudaFree (d_r2);
-    cudaFree (d_v1); cudaFree (d_v2);
-    cudaFree (d_a1); cudaFree (d_a2);
+	cudaFree (d_m);
+	cudaFree (d_r1); cudaFree (d_r2);
+	cudaFree (d_v1); cudaFree (d_v2);
+	cudaFree (d_a1); cudaFree (d_a2);
 
-    cudaDeviceReset();
+	cudaDeviceReset();
 
-    free (h_m);
-    free (h_r1); free (h_r2);
-    free (h_v1); free (h_v2);
-    free (h_a1); free (h_a2);
+	free (h_m);
+	free (h_r1); free (h_r2);
+	free (h_v1); free (h_v2);
+	free (h_a1); free (h_a2);
 
 	pthread_attr_destroy (&attr);
-    pthread_exit(NULL);
+	pthread_exit(NULL);
 
 	return 0;
 }

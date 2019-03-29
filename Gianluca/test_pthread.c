@@ -8,7 +8,7 @@
 
 
 // global constants
-#define NUM_THREADS 256
+#define NUM_THREADS 8
 #define MAX_MASS 100.0f
 #define MAX_POS_X 1000.0f
 #define MAX_POS_Y 1000.0f
