@@ -13,8 +13,8 @@
 #define MAX_VEL_X 0.0f
 #define MAX_VEL_Y 0.0f
 #define G 8
-#define DT 0.0625f
-#define DT2 0.00390625f/2
+#define DT 0.0019531255f
+#define DT2 0.000003814697265625f/2
 #define DAMPING 1.0f
 #define SOFTENING 0.0009765625f
 
@@ -111,8 +111,10 @@ void *init_Acceleration_SMT (void *arg)
 }
 
 
-__global__ void compute_Device (float *o_r, float *o_v, float *o_a, 
-	float *i_r, float *i_v, float *i_a, float *m, const unsigned long nElem)
+__global__ void compute_Device (
+	float *__restrict__ o_r, float *__restrict__ o_v, float *__restrict__ o_a, 
+	const float *__restrict__ i_r, const float *__restrict__ i_v, const float *__restrict__ i_a, 
+	const float *__restrict__ m, const unsigned long nElem)
 {
 	unsigned long tid = blockIdx.x * blockDim.x + threadIdx.x;
 	if (tid == 0)
@@ -123,8 +125,8 @@ __global__ void compute_Device (float *o_r, float *o_v, float *o_a,
 
 	if (tid < nElem) {
 		// calculating subsequent position of body (one body per thread)
-		o_r[2*tid]   = i_r[2*tid]   + i_v[2*tid]*DT   + i_a[2*tid]*DT2;		// x-position
-		o_r[2*tid+1] = i_r[2*tid+1] + i_v[2*tid+1]*DT + i_a[2*tid+1]*DT2;	// y-position
+		o_r[2*tid]   = __ldg(&i_r[2*tid])   + __ldg(&i_v[2*tid])*DT   + __ldg(&i_a[2*tid])*DT2;		// x-position
+		o_r[2*tid+1] = __ldg(&i_r[2*tid+1]) + __ldg(&i_v[2*tid+1])*DT + __ldg(&i_a[2*tid+1])*DT2;	// y-position
 
 		// calculating the NEXT iteration's acceleration and velocity
 		for (unsigned long j=0; j<nElem; j++) {
