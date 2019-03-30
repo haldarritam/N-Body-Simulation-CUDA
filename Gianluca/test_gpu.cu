@@ -16,7 +16,7 @@
 #define DT 0.0625f
 #define DT2 0.00390625f/2
 #define DAMPING 1.0f
-#define SOFTENING 0.015625f
+#define SOFTENING 0.0009765625f
 
 typedef struct {
 	float *m;
@@ -26,7 +26,7 @@ typedef struct {
 	unsigned long nElem, nIter;
 } UNIVERSE;
 
-UNIVERSE system;
+UNIVERSE US;
 
 #define checkCudaErrors(ans) { gpuAssert((ans), __FILE__, __LINE__); }
 inline void gpuAssert(cudaError_t code, const char *file, int line, bool abort=true)
@@ -53,17 +53,17 @@ void init_MassPositionVelocity ()
 	srand ((unsigned int) time(&t));
 
 	// define local variables for convenience
-	unsigned long nElem = system.nElem;
+	unsigned long nElem = US.nElem;
 
 	// populating mass, position, & velocity arrays
 	unsigned long idx;
 	for (idx=0; idx<nElem; idx++) 
 	{
-		system.m[idx]     = (float) ((double) rand() / (double) (RAND_MAX/MAX_MASS));
-		system.r1[2*idx]   = (float) ((double) rand() / (double) (RAND_MAX/(MAX_POS_X*2)) - MAX_POS_X);
-		system.r1[2*idx+1] = (float) ((double) rand() / (double) (RAND_MAX/(MAX_POS_Y*2)) - MAX_POS_Y);
-		system.v1[2*idx]   = (float) ((double) rand() / (double) (RAND_MAX/(MAX_VEL_X*2)) - MAX_VEL_X);
-		system.v1[2*idx+1] = (float) ((double) rand() / (double) (RAND_MAX/(MAX_VEL_Y*2)) - MAX_VEL_Y);
+		US.m[idx]     = (float) ((double) rand() / (double) (RAND_MAX/MAX_MASS));
+		US.r1[2*idx]   = (float) ((double) rand() / (double) (RAND_MAX/(MAX_POS_X*2)) - MAX_POS_X);
+		US.r1[2*idx+1] = (float) ((double) rand() / (double) (RAND_MAX/(MAX_POS_Y*2)) - MAX_POS_Y);
+		US.v1[2*idx]   = (float) ((double) rand() / (double) (RAND_MAX/(MAX_VEL_X*2)) - MAX_VEL_X);
+		US.v1[2*idx+1] = (float) ((double) rand() / (double) (RAND_MAX/(MAX_VEL_Y*2)) - MAX_VEL_Y);
 	}
 }
 
@@ -72,17 +72,17 @@ void *init_Acceleration_SMT (void *arg)
     // define local variables for convenience
     unsigned long start, end, len, offset, nElem;
 
-    nElem = system.nElem;
+    nElem = US.nElem;
     offset = (unsigned long) arg;
-    len = (unsigned long) system.nElem / NUM_CPU_THREADS;
+    len = (unsigned long) US.nElem / NUM_CPU_THREADS;
     start = offset * len;
     end = start + len;
 
     unsigned long i, j;
     float ax_ip1, ay_ip1;
     float dx_ip1, dy_ip1, rDistSquared, invDistCubed;
-    float **i_r = &system.r1;
-    float **o_a = &system.a1;
+    float **i_r = &US.r1;
+    float **o_a = &US.a1;
 
     // calculating NEXT acceleration of each body from the position of every other bodies
     // ... and NEXT velocity of each body utilizing the next acceleration
@@ -97,7 +97,7 @@ void *init_Acceleration_SMT (void *arg)
                 dx_ip1 = *(*i_r + 2*j)   - *(*i_r + 2*i);
                 dy_ip1 = *(*i_r + 2*j+1) - *(*i_r + 2*i+1);
                 rDistSquared = dx_ip1*dx_ip1 + dy_ip1*dy_ip1 + SOFTENING;
-                invDistCubed = G*system.m[j]/sqrtf(rDistSquared*rDistSquared*rDistSquared);
+                invDistCubed = G*US.m[j]/sqrtf(rDistSquared*rDistSquared*rDistSquared);
                 ax_ip1 += dx_ip1 * invDistCubed;
                 ay_ip1 += dy_ip1 * invDistCubed;
             }
@@ -114,7 +114,36 @@ void *init_Acceleration_SMT (void *arg)
 __global__ void compute_Device (float *o_r, float *o_v, float *o_a, 
 	float *i_r, float *i_v, float *i_a, float *m, const unsigned long nElem)
 {
-	unsigned int tid = blockIdx.x * blockDim.x + threadIdx.x;
+	unsigned long tid = blockIdx.x * blockDim.x + threadIdx.x;
+	if (tid == 0)
+		printf("x: %.4f\ty:%.4f\n", i_r[0], i_r[1]);
+
+	float ax_ip1 = 0.0, ay_ip1 = 0.0;
+	float dx_ip1, dy_ip1, rDistSquared, invDistCubed;
+
+	if (tid < nElem) {
+		// calculating subsequent position of body (one body per thread)
+		o_r[2*tid]   = i_r[2*tid]   + i_v[2*tid]*DT   + i_a[2*tid]*DT2;		// x-position
+		o_r[2*tid+1] = i_r[2*tid+1] + i_v[2*tid+1]*DT + i_a[2*tid+1]*DT2;	// y-position
+
+		// calculating the NEXT iteration's acceleration and velocity
+		for (unsigned long j=0; j<nElem; j++) {
+			if (j != tid) {
+				dx_ip1 = o_r[2*j]   - o_r[2*tid];
+				dy_ip1 = o_r[2*j+1] - o_r[2*tid+1];
+				rDistSquared = dx_ip1*dx_ip1 + dy_ip1*dy_ip1 + SOFTENING;
+				invDistCubed = G*m[j]*rsqrtf(rDistSquared*rDistSquared*rDistSquared);
+				ax_ip1 += dx_ip1 * invDistCubed;
+				ay_ip1 += dy_ip1 * invDistCubed;
+			}
+		}
+
+		o_a[2*tid]   = ax_ip1;	// x-acceleration
+		o_a[2*tid+1] = ay_ip1;	// y-acceleration
+
+		o_v[2*tid]   = i_v[2*tid]   + (i_a[2*tid]   + ax_ip1)*DT/2;	// x-velocity
+		o_v[2*tid+1] = i_v[2*tid+1] + (i_a[2*tid+1] + ay_ip1)*DT/2;	// y-velocity
+	}
 }
 
 
@@ -139,14 +168,24 @@ int main (int argc, char *argv[])
 	/// SETTING UP DEVICE
 	////////////////////////////////////////////////////////////////
 
-	int dev = 0;
+	int dev = 0, driverVersion = 0, runtimeVersion = 0;
 	cudaDeviceProp deviceProp;
 	checkCudaErrors (cudaGetDeviceProperties (&deviceProp, dev));
 	checkCudaErrors (cudaSetDevice (dev));
+	checkCudaErrors (cudaDriverGetVersion (&driverVersion));
+	checkCudaErrors (cudaRuntimeGetVersion (&runtimeVersion));
 
 	printf("\n===== Device Properties ======\n\n");
 	printf("  Device %d: %s\n", dev, deviceProp.name);
+	printf("  CUDA Driver Version / Runtime Version: %d.%d / %d.%d\n",
+		driverVersion/1000, (driverVersion%100)/10,
+		runtimeVersion/1000, (runtimeVersion%100)/10);
+	printf("  CUDA Capability Major/Minor version number: %d.%d\n",
+		deviceProp.major, deviceProp.minor);
 	printf("  Number of SMs: %d\n", deviceProp.multiProcessorCount);
+	printf("  Total amount of global memory: %.2f MB (%llu B)\n",
+		(float) deviceProp.totalGlobalMem/pow(1024.0,3),
+		(unsigned long long) deviceProp.totalGlobalMem);
 	printf("  Total amount of constant memory: %4.2f kB\n", 
 		deviceProp.totalConstMem/1024.0);
 	printf("  Total amount of shared memory per block: %4.2f kB\n",
@@ -160,6 +199,13 @@ int main (int argc, char *argv[])
 		deviceProp.maxThreadsPerMultiProcessor);
 	printf("  Maximum number of warps per SM: %d\n",
 		deviceProp.maxThreadsPerMultiProcessor/32);
+	printf("  Maximum size of each block dimension: %d x %d x %d\n",
+		deviceProp.maxThreadsDim[0], deviceProp.maxThreadsDim[1],
+		deviceProp.maxThreadsDim[2]);
+	printf("  Maximum size of each grid dimension: %d x %d x %d\n",
+		deviceProp.maxGridSize[0], deviceProp.maxGridSize[1],
+		deviceProp.maxGridSize[2]);
+	printf("  Maximum memory pitch: %lu B\n", deviceProp.memPitch);
 	printf("  Memory Clock Rate (MHz): %.1f\n", 
 		deviceProp.memoryClockRate/1e3);
 	printf("  Memory Bus Width (b): %d\n", deviceProp.memoryBusWidth);
@@ -171,7 +217,7 @@ int main (int argc, char *argv[])
 	printf("  Number of Bodies = %ld\n", nElem);
 	printf("  Number of Time Steps = %ld\n", nIter);
 	printf("  Number of CPU Threads = %d\n\n", NUM_CPU_THREADS);
-	printf("=================================\n\n");
+	printf("=================================\n\n\n");
 
 	////////////////////////////////////////////////////////////////
 	/// INITIALIZING SIMULATION
@@ -181,7 +227,7 @@ int main (int argc, char *argv[])
 	float *d_m, *d_r1, *d_r2, *d_v1, *d_v2, *d_a1, *d_a2;	// device data
 
 	size_t nBytes = nElem * sizeof(float);
-	m    = (float *) malloc(nBytes);
+	h_m  = (float *) malloc(nBytes);
 	h_r1 = (float *) malloc(nBytes*2);
 	h_r2 = (float *) malloc(nBytes*2);
 	h_v1 = (float *) malloc(nBytes*2);
@@ -189,7 +235,7 @@ int main (int argc, char *argv[])
 	h_a1 = (float *) malloc(nBytes*2);
 	h_a2 = (float *) malloc(nBytes*2);
 
-	memset (m, 0, nBytes);
+	memset (h_m,  0, nBytes);
 	memset (h_r1, 0, nBytes*2);
 	memset (h_r2, 0, nBytes*2);
 	memset (h_v1, 0, nBytes*2);
@@ -198,15 +244,15 @@ int main (int argc, char *argv[])
 	memset (h_a2, 0, nBytes*2);
 
 	// initialize data on host size and then transfer to device
-	system.m = h_m;
-	system.r1 = h_r1;
-	system.r2 = h_r2;
-	system.v1 = h_v1;
-	system.v2 = h_v2;
-	system.a1 = h_a1;
-	system.a2 = h_a2;
-	system.nElem = nElem;
-	system.nIter = nIter;
+	US.m = h_m;
+	US.r1 = h_r1;
+	US.r2 = h_r2;
+	US.v1 = h_v1;
+	US.v2 = h_v2;
+	US.a1 = h_a1;
+	US.a2 = h_a2;
+	US.nElem = nElem;
+	US.nIter = nIter;
 
 	printf("Initializing bodies on HOST. Time taken: ");
 	double time0 = getTimeStamp();
@@ -219,6 +265,9 @@ int main (int argc, char *argv[])
 	pthread_attr_setdetachstate (&attr, PTHREAD_CREATE_JOINABLE);
 
 	// creating the threads to calculate initial body accelerations on HOST
+	unsigned long i;
+	int rc;
+	void *status;
 	for (i=0; i<NUM_CPU_THREADS; i++) {
 		rc = pthread_create (&threads[i], &attr, init_Acceleration_SMT, (void *) i);
 		if (rc) {
@@ -238,7 +287,7 @@ int main (int argc, char *argv[])
 	printf ("%lfs\n", getTimeStamp()-time0);
 
 	// allocating space in device global memory for data
-	checkCudaErrors (cudaMalloc ((void**) &d_m, nBytes));
+	checkCudaErrors (cudaMalloc ((void**) &d_m,  nBytes));
 	checkCudaErrors (cudaMalloc ((void**) &d_r1, nBytes*2));
 	checkCudaErrors (cudaMalloc ((void**) &d_r2, nBytes*2));
 	checkCudaErrors (cudaMalloc ((void**) &d_v1, nBytes*2));
@@ -247,32 +296,33 @@ int main (int argc, char *argv[])
 	checkCudaErrors (cudaMalloc ((void**) &d_a2, nBytes*2));
 
 	// copying initialized data from host to device
-	checkCudaErrors (cudaMemcpy (d_m, h_m, nBytes, cudaMemcopyHostToDevice));
-	checkCudaErrors (cudaMemcpy (d_r1, h_r1, nBytes*2, cudaMemcopyHostToDevice));
-	checkCudaErrors (cudaMemcpy (d_r2, h_r2, nBytes*2, cudaMemcopyHostToDevice));
-	checkCudaErrors (cudaMemcpy (d_v1, h_v1, nBytes*2, cudaMemcopyHostToDevice));
-	checkCudaErrors (cudaMemcpy (d_v2, h_v2, nBytes*2, cudaMemcopyHostToDevice));
-	checkCudaErrors (cudaMemcpy (d_a1, h_a1, nBytes*2, cudaMemcopyHostToDevice));
-	checkCudaErrors (cudaMemcpy (d_a2, h_a2, nBytes*2, cudaMemcopyHostToDevice));
+	checkCudaErrors (cudaMemcpy (d_m,  h_m,  nBytes,   cudaMemcpyHostToDevice));
+	checkCudaErrors (cudaMemcpy (d_r1, h_r1, nBytes*2, cudaMemcpyHostToDevice));
+	checkCudaErrors (cudaMemcpy (d_r2, h_r2, nBytes*2, cudaMemcpyHostToDevice));
+	checkCudaErrors (cudaMemcpy (d_v1, h_v1, nBytes*2, cudaMemcpyHostToDevice));
+	checkCudaErrors (cudaMemcpy (d_v2, h_v2, nBytes*2, cudaMemcpyHostToDevice));
+	checkCudaErrors (cudaMemcpy (d_a1, h_a1, nBytes*2, cudaMemcpyHostToDevice));
+	checkCudaErrors (cudaMemcpy (d_a2, h_a2, nBytes*2, cudaMemcpyHostToDevice));
 
 	////////////////////////////////////////////////////////////////
 	/// PERFORMING SIMULATION ON DEVICE
 	////////////////////////////////////////////////////////////////
 
 	dim3 block (1024);
-	dim3 grid ((nElem+block.x-1)/(block.x));
+	dim3 grid  ((nElem+block.x-1)/(block.x));
+
+	double timestamp_GPU_start = getTimeStamp();
 	for (unsigned long iter=0; iter<nIter; iter++) {
 		if (iter % 2 == 0) {
-
+			compute_Device <<<grid, block, 0, 0>>> (d_r2, d_v2, d_a2, d_r1, d_v1, d_a1, d_m, nElem);
 			cudaDeviceSynchronize ();
 		} else {
-
+			compute_Device <<<grid, block, 0, 0>>> (d_r1, d_v1, d_a1, d_r2, d_v2, d_a2, d_m, nElem);
 			cudaDeviceSynchronize ();
 		}
 	}
-
-
-
+	double timestamp_GPU_end = getTimeStamp();
+	double elapsedTime = timestamp_GPU_end - timestamp_GPU_start;
 
 	////////////////////////////////////////////////////////////////
 	/// SIMULATION COMPLETE
@@ -283,7 +333,11 @@ int main (int argc, char *argv[])
 	cudaFree (d_v1); cudaFree (d_v2);
 	cudaFree (d_a1); cudaFree (d_a2);
 
-	cudaDeviceReset();
+	checkCudaErrors (cudaDeviceReset());
+	printf("Device successfully reset.\n");
+	printf("\nElapsed Time: %lfs\n", elapsedTime);
+	printf("Average timestep simulation duration: %lfs\n", elapsedTime/nIter); 
+
 
 	free (h_m);
 	free (h_r1); free (h_r2);
@@ -291,7 +345,7 @@ int main (int argc, char *argv[])
 	free (h_a1); free (h_a2);
 
 	pthread_attr_destroy (&attr);
-	pthread_exit(NULL);
+	//pthread_exit(NULL);
 
 	return 0;
 }
