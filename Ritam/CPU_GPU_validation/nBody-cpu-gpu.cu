@@ -10,7 +10,8 @@
 pthread_mutex_t mutex_tid;
 
 // main function
-int main (const int argc, const char** argv) {  
+int main (const int argc, const char** argv) {
+  printf("\n");
   int nBodies = 30000;
   float dt = DT; // time step
   int nIters = 10;  // simulation iterations
@@ -39,7 +40,6 @@ int main (const int argc, const char** argv) {
       printf("ERR: Invalid number of arguments passed.\n"
              "Aborting...\n");
       return -1;
-    break;
   }
 
   // initializing the cpu data structure
@@ -56,9 +56,6 @@ int main (const int argc, const char** argv) {
 
   // initializing the data structures
   initialize_bodies(h_body_ds, addr, nBodies);
-  printf("%f %f %f %f %f %f %f %f %f %f\n",
-        h_body_ds[0].m, h_body_ds[0].x, h_body_ds[0].y, h_body_ds[0].z, h_body_ds[0].ax, h_body_ds[0].ay, h_body_ds[0].az, 
-        h_body_ds[0].vx, h_body_ds[0].vy, h_body_ds[0].vz);
 
   // memory for pthreads
   int pBytes = nBodies*sizeof(pthread_t);
@@ -72,10 +69,12 @@ int main (const int argc, const char** argv) {
     for (i = 0; i < nBodies; i++)
       pthread_create(&threads[i], NULL, nbody_calculation_cpu, (void *) &cpu_body_ds);
 
+    // sync the threads
     for (i = 0; i < nBodies; i++) 
       pthread_join(threads[i], NULL);
 
-    for (i = 0 ; i < nBodies; i++) { // integrate position
+    // integrate and find the new positions
+    for (i = 0 ; i < nBodies; i++) {
       cpu_body_ds.buf[i].x += cpu_body_ds.buf[i].vx*dt;
       cpu_body_ds.buf[i].y += cpu_body_ds.buf[i].vy*dt;
     }
@@ -83,7 +82,7 @@ int main (const int argc, const char** argv) {
   }
   double timeStampC = getTimeStamp();
 
-  printf("\n\n");
+  printf("\n");
   // Device side memory allocation
 
   cudaMalloc( (bodyStruct **) &d_body_ds, bytes ) ; 
@@ -110,6 +109,7 @@ int main (const int argc, const char** argv) {
 
     // memcopy (device -> host)
     cudaMemcpy(h_body_ds, d_body_ds, bytes, cudaMemcpyDeviceToHost);
+    
     // integrate and find the new positions
     for (i = 0 ; i < nBodies; i++) { 
       h_body_ds[i].x += h_body_ds[i].vx*dt;
@@ -125,13 +125,11 @@ int main (const int argc, const char** argv) {
     total_time = total_time + (timeStampD - timeStampA);
   }
   fclose(fp);
-    // printf statements
-  printf("%f %f %f %f %f %f %f %f %f %f\n",
-        h_body_ds[0].m, h_body_ds[0].x, h_body_ds[0].y, h_body_ds[0].z, h_body_ds[0].ax, h_body_ds[0].ay, h_body_ds[0].az, 
-        h_body_ds[0].vx, h_body_ds[0].vy, h_body_ds[0].vz);
-  
-  printf("Total interactions: %li\tTotal Time Taken: %lf\n",
-  (long)(nBodies*nBodies*nIters),total_time);
+  // printf statements
+  printf("\n");
+  printf("CPU -- Total Time Taken: %lf\n", (timeStampC - timeStampB));
+  printf("GPU -- Total Time Taken: %lf\n", total_time);
+  printf("\n");
 
   // free memory
   free(addr);
