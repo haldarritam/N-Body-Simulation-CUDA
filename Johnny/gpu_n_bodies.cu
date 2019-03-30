@@ -51,22 +51,8 @@ void cpu_func(float3* h_s, float3* h_v, float3* h_a, float dt, int num_bodies, i
 	float3 r;
 	float r2, inv_r3;
 	FILE* fp = fopen("pos_cpu.txt","w");
-
+	
 	for (i = 0; i < num_iteration; i++) {
-		
-		for (j = 0; j< num_bodies; j++) {
-			for (k = 0; k < num_bodies; k++) {
-				r.x = h_s[k].x - h_s[j].x;
-				r.y = h_s[k].y - h_s[j].y;
-				r.z = h_s[k].z - h_s[j].z;
-				r2 = r.x*r.x + r.y*r.y + r.z*r.z + EPS;
-				inv_r3 = 1.0f / sqrtf(r2*r2*r2);
-				h_a[j].x += inv_r3 * r.x*MASS;
-				h_a[j].y += inv_r3 * r.y*MASS;
-				h_a[j].z += inv_r3 * r.z*MASS;
-			}
-		}
-
 		
 		for (j = 0; j < num_bodies; j++) {
 			
@@ -78,6 +64,23 @@ void cpu_func(float3* h_s, float3* h_v, float3* h_a, float dt, int num_bodies, i
 			h_v[j].z +=  h_a[j].z*dt;
 			fprintf(fp, "%.6f %.6f %.6f\n", h_s[j].x, h_s[j].y, h_s[j].z);
 		}
+		
+		for (j = 0; j< num_bodies; j++) {
+			h_a[j].x = 0;
+			h_a[j].y = 0;
+			h_a[j].z = 0;
+			for (k = 0; k < num_bodies; k++) {
+				r.x = h_s[k].x - h_s[j].x;
+				r.y = h_s[k].y - h_s[j].y;
+				r.z = h_s[k].z - h_s[j].z;
+				r2 = r.x*r.x + r.y*r.y + r.z*r.z + EPS;
+				inv_r3 = 1.0f / sqrtf(r2*r2*r2);
+				h_a[j].x += inv_r3 * r.x*MASS;
+				h_a[j].y += inv_r3 * r.y*MASS;
+				h_a[j].z += inv_r3 * r.z*MASS;
+			}
+		}
+		
 	}
 	fclose(fp);
 
@@ -113,7 +116,7 @@ __global__ void accel_update(float3* s, float3* a, int num_bodies) {
 	float3 accel = { 0.0f,0.0f,0.0f }, myPos = s[gidx];
 	int idx, i, tile = 0;
 
-	if (idx < num_bodies) {
+	if (gidx < num_bodies) {
 		for (i = 0; i < num_bodies; i += blockDim.x) {
 			idx = tile * blockDim.x + threadIdx.x;
 			shared_s[threadIdx.x] = s[idx];
@@ -122,8 +125,9 @@ __global__ void accel_update(float3* s, float3* a, int num_bodies) {
 			__syncthreads();
 			tile++;
 		}
-	}
+	
 	a[gidx] = accel;
+	}
 }
 
 __global__ void pos_update(float3* s, float3* v, float3* a, float dt, int num_bodies) {
