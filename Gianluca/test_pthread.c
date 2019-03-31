@@ -10,15 +10,15 @@
 // global constants
 #define NUM_THREADS 8
 #define MAX_MASS 100.0f
-#define MAX_POS_X 1000.0f
-#define MAX_POS_Y 1000.0f
+#define MAX_POS_X 100.0f
+#define MAX_POS_Y 100.0f
 #define MAX_VEL_X 0.0f
 #define MAX_VEL_Y 0.0f
 #define G 8
-#define DT 0.0625f
-#define DT2 0.00390625f/2
+#define DT 0.0019531255f
+#define DT2 0.000003814697265625f/2
 #define DAMPING 1.0f
-#define SOFTENING 0.015625f
+#define SOFTENING 0.0009765625f
 
 typedef struct {
 	float *m;
@@ -45,8 +45,9 @@ double getTimeStamp()
 void init_MassPositionVelocity ()
 {
     // generate different seed for pseudo-random number generator
-    time_t t;
-    srand ((unsigned int) time(&t));
+    //time_t t;
+    //srand ((unsigned int) time(&t));
+    srand ((unsigned int) 1000);
 
     // define local variables for convenience
     unsigned long nElem = US.nElem;
@@ -55,13 +56,96 @@ void init_MassPositionVelocity ()
     unsigned long idx;
     for (idx=0; idx<nElem; idx++) 
     {
-        US.m[idx]     = (float) ((double) rand() / (double) (RAND_MAX/MAX_MASS));
+        US.m[idx]     = 100.0;//(float) ((double) rand() / (double) (RAND_MAX/MAX_MASS));
         US.r1[2*idx]   = (float) ((double) rand() / (double) (RAND_MAX/(MAX_POS_X*2)) - MAX_POS_X);
         US.r1[2*idx+1] = (float) ((double) rand() / (double) (RAND_MAX/(MAX_POS_Y*2)) - MAX_POS_Y);
         US.v1[2*idx]   = (float) ((double) rand() / (double) (RAND_MAX/(MAX_VEL_X*2)) - MAX_VEL_X);
         US.v1[2*idx+1] = (float) ((double) rand() / (double) (RAND_MAX/(MAX_VEL_Y*2)) - MAX_VEL_Y);
     }
 }
+
+void print_BodyStats (unsigned long iter)
+{
+    unsigned long nElem = US.nElem;
+    float **r, **v, **a;
+
+    if (iter % 2 == 0) {
+        r = &(US.r1);
+        v = &(US.v1);
+        a = &(US.a1);
+    } else {
+        r = &(US.r2);
+        v = &(US.v2);
+        a = &(US.a2);
+    }
+
+    printf("\n");
+    // print body number
+    for (unsigned long idx=0; idx<nElem; idx++) {
+        if (idx == nElem-1)
+            printf("Mass %ld\n", idx);
+        else
+            printf("Mass %ld\t", idx);
+    }
+
+    // print Mass
+    for (unsigned long idx=0; idx<nElem; idx++) {
+        if (idx == nElem-1)
+            printf("%.2f\n", US.m[idx]);
+        else
+            printf("%.2f\t", US.m[idx]);
+    }
+
+    // print x-position
+    for (unsigned long idx=0; idx<nElem; idx++) {
+        if (idx == nElem-1)
+            printf("%.2f\n", *(*r + 2*idx));
+        else
+            printf("%.2f\t", *(*r + 2*idx));
+    }
+
+    // print y-position
+    for (unsigned long idx=0; idx<nElem; idx++) {
+        if (idx == nElem-1)
+            printf("%.2f\n", *(*r + 2*idx+1));
+        else
+            printf("%.2f\t", *(*r + 2*idx+1));
+    }
+
+    // print x-velocity
+    for (unsigned long idx=0; idx<nElem; idx++) {
+        if (idx == nElem-1)
+            printf("%.2f\n", *(*v + 2*idx));
+        else
+            printf("%.2f\t", *(*v + 2*idx));
+    }
+
+    // print y-velocity
+    for (unsigned long idx=0; idx<nElem; idx++) {
+        if (idx == nElem-1)
+            printf("%.2f\n", *(*v + 2*idx+1));
+        else
+            printf("%.2f\t", *(*v + 2*idx+1));
+    }
+
+    // print x-acceleration
+    for (unsigned long idx=0; idx<nElem; idx++) {
+        if (idx == nElem-1)
+            printf("%.2f\n", *(*a + 2*idx));
+        else
+            printf("%.2f\t", *(*a + 2*idx));
+    }
+
+    // print y-acceleration
+    for (unsigned long idx=0; idx<nElem; idx++) {
+        if (idx == nElem-1)
+            printf("%.2f\n\n", *(*a + 2*idx+1));
+        else
+            printf("%.2f\t", *(*a + 2*idx+1));
+    }
+
+}
+
 
 void *init_Acceleration_SMT (void *arg)
 {
@@ -77,8 +161,8 @@ void *init_Acceleration_SMT (void *arg)
     unsigned long i, j;
     float ax_ip1, ay_ip1;
     float dx_ip1, dy_ip1, rDistSquared, invDistCubed;
-    float **i_r = &US.r1;
-    float **o_a = &US.a1;
+    float **i_r = &(US.r1);
+    float **o_a = &(US.a1);
 
     // calculating NEXT acceleration of each body from the position of every other bodies
     // ... and NEXT velocity of each body utilizing the next acceleration
@@ -90,8 +174,8 @@ void *init_Acceleration_SMT (void *arg)
         {
             if (j != i)
             {
-                dx_ip1 = *(*i_r + 2*j)   - *(*i_r + 2*i);
-                dy_ip1 = *(*i_r + 2*j+1) - *(*i_r + 2*i+1);
+                dx_ip1 = *(*i_r + (2*j))   - *(*i_r + (2*i));
+                dy_ip1 = *(*i_r + (2*j+1)) - *(*i_r + (2*i+1));
                 rDistSquared = dx_ip1*dx_ip1 + dy_ip1*dy_ip1 + SOFTENING;
                 invDistCubed = G*US.m[j]/sqrtf(rDistSquared*rDistSquared*rDistSquared);
                 ax_ip1 += dx_ip1 * invDistCubed;
@@ -99,8 +183,8 @@ void *init_Acceleration_SMT (void *arg)
             }
         }
 
-        *(*o_a + 2*i)   = ax_ip1;
-        *(*o_a + 2*i+1) = ay_ip1;
+        *(*o_a + (2*i))   = ax_ip1;
+        *(*o_a + (2*i+1)) = ay_ip1;
     }
 
     pthread_exit (NULL);
@@ -115,7 +199,7 @@ void *computeHost_SMT (void *arg)
 	nElem = US.nElem;
 	nIter = US.nIter;
 	offset = (unsigned long) arg;
-	len = (unsigned long) US.nElem / NUM_THREADS;
+	len = (unsigned long) nElem / NUM_THREADS;
 	start = offset * len;
 	end = start + len;
 
@@ -128,28 +212,47 @@ void *computeHost_SMT (void *arg)
 
 		// since the computation cannot be done inplace, we constantly need to 
 		// swap where the input and output data locations are
-		if (iter % 2) {
-			i_r = &US.r2;
-			i_v = &US.v2;
-			i_a = &US.a2;
-			o_r = &US.r1;
-			o_v = &US.v1;
-			o_a = &US.a1;
+		if (iter % 2 == 0) {
+            i_r = &(US.r1);
+            i_v = &(US.v1);
+            i_a = &(US.a1);
+            o_r = &(US.r2);
+            o_v = &(US.v2);
+            o_a = &(US.a2);
 		} else {
-			i_r = &US.r1;
-			i_v = &US.v1;
-			i_a = &US.a1;
-			o_r = &US.r2;
-			o_v = &US.v2;
-			o_a = &US.a2;
+            i_r = &(US.r2);
+            i_v = &(US.v2);
+            i_a = &(US.a2);
+            o_r = &(US.r1);
+            o_v = &(US.v1);
+            o_a = &(US.a1);
 		}
+
 
 		// calculating NEXT position of each body
 	    for (i=start; i<end; i++)
 	    {
-	        *(*o_r + 2*i)   = *(*i_r + 2*i)   + *(*i_v + 2*i)*DT   + *(*i_a + 2*i)  *DT2;
-	        *(*o_r + 2*i+1) = *(*i_r + 2*i+1) + *(*i_v + 2*i+1)*DT + *(*i_a + 2*i+1)*DT2;
+	        *(*o_r + (2*i))   = *(*i_r + (2*i))   + *(*i_v + (2*i))*DT   + *(*i_a + (2*i))  *DT2;
+	        *(*o_r + (2*i+1)) = *(*i_r + (2*i+1)) + *(*i_v + (2*i+1))*DT + *(*i_a + (2*i+1))*DT2;
 	    }
+
+        // position computation done
+        pthread_mutex_lock (&count_mutex);
+        count++;
+
+        if (count == NUM_THREADS*(2*iter+1)) {
+            pthread_cond_broadcast (&count_condition);
+            //printf("Broadcasting by tid=%ld\n", offset);
+        }
+        else {
+            do {
+                pthread_cond_wait (&count_condition, &count_mutex);
+                //printf("Condition Broadcast received by tid=%ld\n", offset);
+            } while (count < NUM_THREADS*(2*iter+1));
+        }
+
+        pthread_mutex_unlock (&count_mutex);
+
 
 	    // calculating NEXT acceleration of each body from the position of every other bodies
 	    // ... and NEXT velocity of each body utilizing the next acceleration
@@ -161,19 +264,19 @@ void *computeHost_SMT (void *arg)
 	        {
 	            if (j != i)
 	            {
-	                dx_ip1 = *(*o_r + 2*j)   - *(*o_r + 2*i);
-	                dy_ip1 = *(*o_r + 2*j+1) - *(*o_r + 2*i+1);
+	                dx_ip1 = *(*o_r + (2*j))   - *(*o_r + (2*i));
+	                dy_ip1 = *(*o_r + (2*j+1)) - *(*o_r + (2*i+1));
 	                rDistSquared = dx_ip1*dx_ip1 + dy_ip1*dy_ip1 + SOFTENING;
 	                invDistCubed = G*US.m[j]/sqrtf(rDistSquared*rDistSquared*rDistSquared);
 	                ax_ip1 += dx_ip1 * invDistCubed;
 	                ay_ip1 += dy_ip1 * invDistCubed;
 	            }
 	        }
-	        *(*o_a + 2*i)   = ax_ip1;
-	        *(*o_a + 2*i+1) = ay_ip1;
+	        *(*o_a + (2*i))   = ax_ip1;
+	        *(*o_a + (2*i+1)) = ay_ip1;
 
-	        *(*o_v + 2*i)   = ( *(*i_v + 2*i)   + (*(*i_a + 2*i)  +ax_ip1)*DT/2 ) * DAMPING;
-	        *(*o_v + 2*i+1) = ( *(*i_v + 2*i+1) + (*(*i_a + 2*i+1)+ay_ip1)*DT/2 ) * DAMPING;
+	        *(*o_v + (2*i))   = *(*i_v + (2*i))   + (*(*i_a + (2*i))  +ax_ip1)*DT/2;
+	        *(*o_v + (2*i+1)) = *(*i_v + (2*i+1)) + (*(*i_a + (2*i+1))+ay_ip1)*DT/2;
 	    }
 
 
@@ -181,7 +284,7 @@ void *computeHost_SMT (void *arg)
 		pthread_mutex_lock (&count_mutex);
 		count++;
 
-		if (count == NUM_THREADS*(iter+1)) {
+		if (count == NUM_THREADS*(2*iter+2)) {
 			pthread_cond_broadcast (&count_condition);
 			//printf("Broadcasting by tid=%ld\n", offset);
 		}
@@ -189,13 +292,15 @@ void *computeHost_SMT (void *arg)
 			do {
 				pthread_cond_wait (&count_condition, &count_mutex);
 				//printf("Condition Broadcast received by tid=%ld\n", offset);
-			} while (count < NUM_THREADS*(iter+1));
+			} while (count < NUM_THREADS*(2*iter+2));
 		}
 
 		pthread_mutex_unlock (&count_mutex);
 
-		if (offset == 0)
-			printf("x: %.4f\ty: %.4f\n", **o_r, *(*o_r+1));
+		if ((offset == 0) && (iter%1000 == 0)) {
+			//printf("x: %.6f\ty: %.6f\n", **o_r, *(*o_r+1));
+            print_BodyStats (iter+1);
+        }
 	}
 
 	pthread_exit (NULL);
@@ -260,7 +365,7 @@ int main(int argc, char const *argv[])
     printf("Initializing bodies. Time taken: ");
     double time0 = getTimeStamp();
     init_MassPositionVelocity();
-
+    
     // initialize mutex and condition variable objects
     pthread_mutex_init (&count_mutex, NULL);
     pthread_cond_init (&count_condition, NULL);
@@ -292,6 +397,7 @@ int main(int argc, char const *argv[])
         //  i, (long) status);
     }
     printf ("%lfs\n", getTimeStamp()-time0);
+    print_BodyStats (0);
 
     printf("\nBeginning CPU simulation ...\n");
 	double time1 = getTimeStamp();

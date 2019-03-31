@@ -6,10 +6,12 @@
 #include <pthread.h>
 #include <cuda_runtime.h>
 
+
+// global constants
 #define NUM_CPU_THREADS 32
 #define MAX_MASS 100.0f
-#define MAX_POS_X 1000.0f
-#define MAX_POS_Y 1000.0f
+#define MAX_POS_X 100.0f
+#define MAX_POS_Y 100.0f
 #define MAX_VEL_X 0.0f
 #define MAX_VEL_Y 0.0f
 #define G 8
@@ -46,11 +48,83 @@ double getTimeStamp()
 	return (double) tv.tv_usec/1000000 + tv.tv_sec;
 }
 
+void print_BodyStats (const float *m, const float *r, const float *v, const float *a)
+{
+    unsigned long nElem = US.nElem;
+
+    printf("\n");
+    // print body number
+    for (unsigned long idx=0; idx<nElem; idx++) {
+        if (idx == nElem-1)
+            printf("Mass %ld\n", idx);
+        else
+            printf("Mass %ld\t", idx);
+    }
+
+    // print Mass
+    for (unsigned long idx=0; idx<nElem; idx++) {
+        if (idx == nElem-1)
+            printf("%.2f\n", m[idx]);
+        else
+            printf("%.2f\t", m[idx]);
+    }
+
+    // print x-position
+    for (unsigned long idx=0; idx<nElem; idx++) {
+        if (idx == nElem-1)
+            printf("%.2f\n", r[2*idx]);
+        else
+            printf("%.2f\t", r[2*idx]);
+    }
+
+    // print y-position
+    for (unsigned long idx=0; idx<nElem; idx++) {
+        if (idx == nElem-1)
+            printf("%.2f\n", r[2*idx+1]);
+        else
+            printf("%.2f\t", r[2*idx+1]);
+    }
+
+    // print x-velocity
+    for (unsigned long idx=0; idx<nElem; idx++) {
+        if (idx == nElem-1)
+            printf("%.2f\n", v[2*idx]);
+        else
+            printf("%.2f\t", v[2*idx]);
+    }
+
+    // print y-velocity
+    for (unsigned long idx=0; idx<nElem; idx++) {
+        if (idx == nElem-1)
+            printf("%.2f\n", v[2*idx+1]);
+        else
+            printf("%.2f\t", v[2*idx+1]);
+    }
+
+    // print x-acceleration
+    for (unsigned long idx=0; idx<nElem; idx++) {
+        if (idx == nElem-1)
+            printf("%.2f\n", a[2*idx]);
+        else
+            printf("%.2f\t", a[2*idx]);
+    }
+
+    // print y-acceleration
+    for (unsigned long idx=0; idx<nElem; idx++) {
+        if (idx == nElem-1)
+            printf("%.2f\n\n", a[2*idx+1]);
+        else
+            printf("%.2f\t", a[2*idx+1]);
+    }
+
+}
+
 void init_MassPositionVelocity ()
 {
 	// generate different seed for pseudo-random number generator
-	time_t t;
-	srand ((unsigned int) time(&t));
+	// time_t t;
+	// srand ((unsigned int) time(&t));
+	srand ((unsigned int) 1000);
 
 	// define local variables for convenience
 	unsigned long nElem = US.nElem;
@@ -59,7 +133,7 @@ void init_MassPositionVelocity ()
 	unsigned long idx;
 	for (idx=0; idx<nElem; idx++) 
 	{
-		US.m[idx]     = (float) ((double) rand() / (double) (RAND_MAX/MAX_MASS));
+		US.m[idx]     = 100.0;//(float) ((double) rand() / (double) (RAND_MAX/MAX_MASS));
 		US.r1[2*idx]   = (float) ((double) rand() / (double) (RAND_MAX/(MAX_POS_X*2)) - MAX_POS_X);
 		US.r1[2*idx+1] = (float) ((double) rand() / (double) (RAND_MAX/(MAX_POS_Y*2)) - MAX_POS_Y);
 		US.v1[2*idx]   = (float) ((double) rand() / (double) (RAND_MAX/(MAX_VEL_X*2)) - MAX_VEL_X);
@@ -112,21 +186,21 @@ void *init_Acceleration_SMT (void *arg)
 
 
 __global__ void compute_Device (
-	float *__restrict__ o_r, float *__restrict__ o_v, float *__restrict__ o_a, 
-	const float *__restrict__ i_r, const float *__restrict__ i_v, const float *__restrict__ i_a, 
-	const float *__restrict__ m, const unsigned long nElem)
+	float *o_r, float *o_v, float *o_a, 
+	const float *i_r, const float *i_v, const float *i_a, 
+	const float *m, const unsigned long nElem)
 {
 	unsigned long tid = blockIdx.x * blockDim.x + threadIdx.x;
-	if (tid == 0)
-		printf("x: %.4f\ty:%.4f\n", i_r[0], i_r[1]);
+	// if (tid == 0)
+	// 	printf("x: %.6f\ty:%.6f\n", i_r[0], i_r[1]);
 
 	float ax_ip1 = 0.0, ay_ip1 = 0.0;
 	float dx_ip1, dy_ip1, rDistSquared, invDistCubed;
 
 	if (tid < nElem) {
 		// calculating subsequent position of body (one body per thread)
-		o_r[2*tid]   = __ldg(&i_r[2*tid])   + __ldg(&i_v[2*tid])*DT   + __ldg(&i_a[2*tid])*DT2;		// x-position
-		o_r[2*tid+1] = __ldg(&i_r[2*tid+1]) + __ldg(&i_v[2*tid+1])*DT + __ldg(&i_a[2*tid+1])*DT2;	// y-position
+		o_r[2*tid]   = i_r[2*tid]   + i_v[2*tid]*DT   + i_a[2*tid]*DT2;		// x-position
+		o_r[2*tid+1] = i_r[2*tid+1] + i_v[2*tid+1]*DT + i_a[2*tid+1]*DT2;	// y-position
 
 		// calculating the NEXT iteration's acceleration and velocity
 		for (unsigned long j=0; j<nElem; j++) {
@@ -227,6 +301,7 @@ int main (int argc, char *argv[])
 
 	float *h_m, *h_r1, *h_r2, *h_v1, *h_v2, *h_a1, *h_a2;	// host data
 	float *d_m, *d_r1, *d_r2, *d_v1, *d_v2, *d_a1, *d_a2;	// device data
+	float *gref_m, *gref_r, *gref_v, *gref_a;
 
 	size_t nBytes = nElem * sizeof(float);
 	h_m  = (float *) malloc(nBytes);
@@ -237,6 +312,11 @@ int main (int argc, char *argv[])
 	h_a1 = (float *) malloc(nBytes*2);
 	h_a2 = (float *) malloc(nBytes*2);
 
+	gref_m  = (float *) malloc(nBytes);
+	gref_r = (float *) malloc(nBytes*2);
+	gref_v = (float *) malloc(nBytes*2);
+	gref_a = (float *) malloc(nBytes*2);
+
 	memset (h_m,  0, nBytes);
 	memset (h_r1, 0, nBytes*2);
 	memset (h_r2, 0, nBytes*2);
@@ -244,6 +324,11 @@ int main (int argc, char *argv[])
 	memset (h_v2, 0, nBytes*2);
 	memset (h_a1, 0, nBytes*2);
 	memset (h_a2, 0, nBytes*2);
+
+	memset (gref_m,  0, nBytes);
+	memset (gref_r, 0, nBytes*2);
+	memset (gref_v, 0, nBytes*2);
+	memset (gref_a, 0, nBytes*2);
 
 	// initialize data on host size and then transfer to device
 	US.m = h_m;
@@ -287,6 +372,7 @@ int main (int argc, char *argv[])
 		}
 	}
 	printf ("%lfs\n", getTimeStamp()-time0);
+	print_BodyStats(h_m, h_r1, h_v1, h_a1);
 
 	// allocating space in device global memory for data
 	checkCudaErrors (cudaMalloc ((void**) &d_m,  nBytes));
@@ -318,10 +404,21 @@ int main (int argc, char *argv[])
 		if (iter % 2 == 0) {
 			compute_Device <<<grid, block, 0, 0>>> (d_r2, d_v2, d_a2, d_r1, d_v1, d_a1, d_m, nElem);
 			cudaDeviceSynchronize ();
+			cudaMemcpy(gref_m, d_m, nBytes, cudaMemcpyDeviceToHost);
+			cudaMemcpy(gref_r, d_r2, nBytes*2, cudaMemcpyDeviceToHost);
+			cudaMemcpy(gref_v, d_v2, nBytes*2, cudaMemcpyDeviceToHost);
+			cudaMemcpy(gref_a, d_a2, nBytes*2, cudaMemcpyDeviceToHost);
+
 		} else {
 			compute_Device <<<grid, block, 0, 0>>> (d_r1, d_v1, d_a1, d_r2, d_v2, d_a2, d_m, nElem);
 			cudaDeviceSynchronize ();
+			cudaMemcpy(gref_m, d_m, nBytes, cudaMemcpyDeviceToHost);
+			cudaMemcpy(gref_r, d_r1, nBytes*2, cudaMemcpyDeviceToHost);
+			cudaMemcpy(gref_v, d_v1, nBytes*2, cudaMemcpyDeviceToHost);
+			cudaMemcpy(gref_a, d_a1, nBytes*2, cudaMemcpyDeviceToHost);
 		}
+		if (iter%1000 == 0)
+			print_BodyStats (gref_m, gref_r, gref_v, gref_a);
 	}
 	double timestamp_GPU_end = getTimeStamp();
 	double elapsedTime = timestamp_GPU_end - timestamp_GPU_start;
@@ -345,6 +442,11 @@ int main (int argc, char *argv[])
 	free (h_r1); free (h_r2);
 	free (h_v1); free (h_v2);
 	free (h_a1); free (h_a2);
+
+	free (gref_m);
+	free (gref_r);
+	free (gref_v);
+	free (gref_a);
 
 	pthread_attr_destroy (&attr);
 	//pthread_exit(NULL);
