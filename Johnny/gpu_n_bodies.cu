@@ -5,7 +5,7 @@
 #include <math.h>
 
 //add this if compiled by visual studio
-#include <device_launch_parameters.h>
+//#include <device_launch_parameters.h>
 
 #define G 6.67e-2f
 #define BLOCK_DIM 1024
@@ -13,7 +13,7 @@
 #define MASS 10000.0f
 #define EPS 1.0f
 
-
+extern __shared__ float3 shared_s[];
 
 
 void initialize(float3* h_s, float3* h_v, float3* h_a, float dt, int num_bodies) {
@@ -79,11 +79,12 @@ void cpu_func(float3* h_s, float3* h_v, float3* h_a, float dt, int num_bodies, i
 					h_a[j].y += inv_r3 * r.y*MASS;
 					h_a[j].z += inv_r3 * r.z*MASS;
 					//printf("cpu: ax[%d]=%.6f\n", j, h_a[j].x);
+					//printf("cpu r1[%d]=%.6f r2[%d]=%.6f\n",j, h_s[j].x ,j,h_s[k].x);
 				}
 			}	
 		}
 		clock_t t1 = clock();
-		printf("iteration %d, time cost %.6f\n", i, (float)(t1 - t0) / (float)CLOCKS_PER_SEC);
+		//printf("iteration %d, time cost %.6f\n", i, (float)(t1 - t0) / (float)CLOCKS_PER_SEC);
 		total_t += (float)(t1 - t0) / (float)CLOCKS_PER_SEC;
 		for (j = 0; j < num_bodies; j++) {
 			fprintf(fp1, "%.6f %.6f %.6f\n", h_a[j].x, h_a[j].y, h_a[j].z);
@@ -102,14 +103,14 @@ __global__ void initialize(float3* s,float3* v,float3* a,int num_bodies){
 }*/
 
 __device__ void force_calc(float3 s,int check_idx,int tile, int num_bodies, float3* a) {
-	__shared__ float3 shared_s[BLOCK_DIM];
+	
 	int i,N=BLOCK_DIM;
 	float3 r;
 	float r2, inv_r3;
 	if ((tile + 1)*BLOCK_DIM > num_bodies) {
 		N = num_bodies % BLOCK_DIM;
 	}
-
+	//printf("gidx=%d\t", blockDim.x*blockIdx.x + threadIdx.x);
 	for (i = 0; i < N; i++) {
 		if (i!=check_idx) {
 			r.x = shared_s[i].x - s.x;
@@ -120,17 +121,17 @@ __device__ void force_calc(float3 s,int check_idx,int tile, int num_bodies, floa
 			(*a).x += inv_r3 * r.x*MASS;
 			(*a).y += inv_r3 * r.y*MASS;
 			(*a).z += inv_r3 * r.z*MASS;
-			//printf("gpu a.x=%.6f\n", (*a).x);
+			//printf("gpu r1=%.6f r2=%.6f\n", s.x,shared_s[i].x);
 		}
-		else {
+		//else {
 			//printf("sggsgsgs\n");
-		}
+		//}
 	}
 }
 
 
 __global__ void accel_update(float3* s, float3* a, int num_bodies) {
-	__shared__ float3 shared_s[BLOCK_DIM];
+	
 	int gidx = blockDim.x*blockIdx.x + threadIdx.x;
 	float3 accel = { 0.0f,0.0f,0.0f }, myPos;
 	int idx, i, tile = 0;
@@ -174,12 +175,12 @@ void gpu_func(float3* s, float3* v, float3* a, float3* h_s, float3* h_a, float d
 	float total_t = 0;
 	for (i = 0; i < num_iteration; i++) {
 		clock_t t0 = clock();
-		pos_update <<<(num_bodies + BLOCK_DIM - 1) / BLOCK_DIM, BLOCK_DIM >>> (s, v, a, dt, num_bodies);
+		pos_update <<<(num_bodies + BLOCK_DIM - 1) / BLOCK_DIM, BLOCK_DIM ,sizeof(float3)*BLOCK_DIM>>> (s, v, a, dt, num_bodies);
 		cudaDeviceSynchronize();
-		accel_update <<<(num_bodies + BLOCK_DIM - 1) / BLOCK_DIM, BLOCK_DIM >>> (s, a, num_bodies);
+		accel_update <<<(num_bodies + BLOCK_DIM - 1) / BLOCK_DIM, BLOCK_DIM, sizeof(float3)*BLOCK_DIM >>> (s, a, num_bodies);
 		cudaDeviceSynchronize();
 		clock_t t1 = clock();
-		printf("iteration %d, time cost %.6f\n", i, (float)(t1 - t0) /(float)CLOCKS_PER_SEC);
+		//printf("iteration %d, time cost %.6f\n", i, (float)(t1 - t0) /(float)CLOCKS_PER_SEC);
 		total_t += (float)(t1 - t0) / (float)CLOCKS_PER_SEC;
 		cudaMemcpy(h_s, s, num_bodies * sizeof(float3), cudaMemcpyDeviceToHost);
 		cudaMemcpy( h_a, a, num_bodies * sizeof(float3), cudaMemcpyDeviceToHost );
