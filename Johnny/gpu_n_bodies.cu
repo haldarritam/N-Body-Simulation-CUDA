@@ -5,7 +5,7 @@
 #include <math.h>
 
 //add this if compiled by visual studio
-//#include <device_launch_parameters.h>
+#include <device_launch_parameters.h>
 
 #define G 6.67e-2f
 #define BLOCK_DIM 1024
@@ -84,7 +84,7 @@ void cpu_func(float3* h_s, float3* h_v, float3* h_a, float dt, int num_bodies, i
 			}	
 		}
 		clock_t t1 = clock();
-		//printf("iteration %d, time cost %.6f\n", i, (float)(t1 - t0) / (float)CLOCKS_PER_SEC);
+		printf("iteration %d, time cost %.6f\n", i, (float)(t1 - t0) / (float)CLOCKS_PER_SEC);
 		total_t += (float)(t1 - t0) / (float)CLOCKS_PER_SEC;
 		for (j = 0; j < num_bodies; j++) {
 			fprintf(fp1, "%.6f %.6f %.6f\n", h_a[j].x, h_a[j].y, h_a[j].z);
@@ -102,8 +102,7 @@ __global__ void initialize(float3* s,float3* v,float3* a,int num_bodies){
 
 }*/
 
-__device__ void force_calc(float3 s,int check_idx,int tile, int num_bodies, float3* a) {
-	
+__device__ void force_calc(float3 s,int tile, int num_bodies, float3* a) {
 	int i,N=BLOCK_DIM;
 	float3 r;
 	float r2, inv_r3;
@@ -112,7 +111,7 @@ __device__ void force_calc(float3 s,int check_idx,int tile, int num_bodies, floa
 	}
 	//printf("gidx=%d\t", blockDim.x*blockIdx.x + threadIdx.x);
 	for (i = 0; i < N; i++) {
-		if (i!=check_idx) {
+		//if (i!=check_idx) {
 			r.x = shared_s[i].x - s.x;
 			r.y = shared_s[i].y - s.y;
 			r.z = shared_s[i].z - s.z;
@@ -121,39 +120,36 @@ __device__ void force_calc(float3 s,int check_idx,int tile, int num_bodies, floa
 			(*a).x += inv_r3 * r.x*MASS;
 			(*a).y += inv_r3 * r.y*MASS;
 			(*a).z += inv_r3 * r.z*MASS;
-			//printf("gpu r1=%.6f r2=%.6f\n", s.x,shared_s[i].x);
-		}
-		//else {
-			//printf("sggsgsgs\n");
+			//printf("gpu r1=%.6f r2=%.6f gidx=%d\n", s.x,shared_s[i].x, blockDim.x*blockIdx.x + threadIdx.x);
 		//}
+		
+		
 	}
 }
 
 
-__global__ void accel_update(float3* s, float3* a, int num_bodies) {
-	
+__global__ void accel_update(float3* s, float3* a, int num_bodies,int total_elem) {
 	int gidx = blockDim.x*blockIdx.x + threadIdx.x;
 	float3 accel = { 0.0f,0.0f,0.0f }, myPos;
 	int idx, i, tile = 0;
 
-	if (gidx < num_bodies) {
-		myPos = s[gidx];
+	//if (gidx < num_bodies) 
+	myPos = s[gidx];
 	
-		
 	
 	for (i = 0; i < num_bodies; i += blockDim.x) {
 		idx = tile * blockDim.x + threadIdx.x;
-		if (idx <= num_bodies) {
+		if (idx <= total_elem) {
 			shared_s[threadIdx.x] = s[idx];
 			__syncthreads();
-			force_calc(myPos,threadIdx.x,tile,num_bodies,&accel);
+			force_calc(myPos,tile,num_bodies,&accel);
 			__syncthreads();
 			tile++;
 		}
 	}
 	
 	a[gidx] = accel;
-	}
+	
 }
 
 __global__ void pos_update(float3* s, float3* v, float3* a, float dt, int num_bodies) {
@@ -168,7 +164,7 @@ __global__ void pos_update(float3* s, float3* v, float3* a, float dt, int num_bo
 	}
 }
 
-void gpu_func(float3* s, float3* v, float3* a, float3* h_s, float3* h_a, float dt, int num_bodies, int num_iteration) {
+void gpu_func(float3* s, float3* v, float3* a, float3* h_s, float3* h_a, float dt, int num_bodies, int total_elem, int num_iteration) {
 	int i, j;
 	FILE *fp = fopen("pos.txt", "w");
 	FILE *fp1 = fopen("accel.txt", "w");
@@ -177,13 +173,13 @@ void gpu_func(float3* s, float3* v, float3* a, float3* h_s, float3* h_a, float d
 		clock_t t0 = clock();
 		pos_update <<<(num_bodies + BLOCK_DIM - 1) / BLOCK_DIM, BLOCK_DIM ,sizeof(float3)*BLOCK_DIM>>> (s, v, a, dt, num_bodies);
 		cudaDeviceSynchronize();
-		accel_update <<<(num_bodies + BLOCK_DIM - 1) / BLOCK_DIM, BLOCK_DIM, sizeof(float3)*BLOCK_DIM >>> (s, a, num_bodies);
+		accel_update <<<(num_bodies + BLOCK_DIM - 1) / BLOCK_DIM, BLOCK_DIM, sizeof(float3)*BLOCK_DIM >>> (s, a, num_bodies, total_elem);
 		cudaDeviceSynchronize();
 		clock_t t1 = clock();
-		//printf("iteration %d, time cost %.6f\n", i, (float)(t1 - t0) /(float)CLOCKS_PER_SEC);
+		printf("iteration %d, time cost %.6f\n", i, (float)(t1 - t0) /(float)CLOCKS_PER_SEC);
 		total_t += (float)(t1 - t0) / (float)CLOCKS_PER_SEC;
-		cudaMemcpy(h_s, s, num_bodies * sizeof(float3), cudaMemcpyDeviceToHost);
-		cudaMemcpy( h_a, a, num_bodies * sizeof(float3), cudaMemcpyDeviceToHost );
+		cudaMemcpy(h_s, s, total_elem * sizeof(float3), cudaMemcpyDeviceToHost);
+		cudaMemcpy( h_a, a, total_elem * sizeof(float3), cudaMemcpyDeviceToHost );
 		for (j = 0; j < num_bodies; j++) {
 			fprintf(fp, "%.6f %.6f %.6f\n", h_s[j].x, h_s[j].y, h_s[j].z);
 			fprintf(fp1, "%.6f %.6f %.6f\n", h_a[j].x, h_a[j].y, h_a[j].z);
@@ -206,17 +202,20 @@ int main(int argc, char *argv[]) {
 	int num_iteration = 10;
 	if (argc > 3) num_iteration = atoi(argv[3]);
 
+	int D = (num_bodies + BLOCK_DIM - 1) / BLOCK_DIM;
+	int total_elem = D * BLOCK_DIM;
+
 	//host memory allocation
 	float3 *h_s, *h_v, *h_a;
-		cudaError_t err00 = cudaMallocHost((void**)&h_s, num_bodies * sizeof(float3));
+		cudaError_t err00 = cudaMallocHost((void**)&h_s, total_elem * sizeof(float3));
 	if (err00 != cudaSuccess) {
 		printf("%s in %s at line %d\n", cudaGetErrorString(err00), __FILE__, __LINE__);
 	}
-	cudaError_t err01 = cudaMallocHost((void**)&h_v, num_bodies * sizeof(float3));
+	cudaError_t err01 = cudaMallocHost((void**)&h_v, total_elem * sizeof(float3));
 	if (err01 != cudaSuccess) {
 		printf("%s in %s at line %d\n", cudaGetErrorString(err01), __FILE__, __LINE__);
 	}
-	cudaError_t err02 = cudaMallocHost((void**)&h_a, num_bodies * sizeof(float3));
+	cudaError_t err02 = cudaMallocHost((void**)&h_a, total_elem * sizeof(float3));
 	if (err02 != cudaSuccess) {
 		printf("%s in %s at line %d\n", cudaGetErrorString(err02), __FILE__, __LINE__);
 	}
@@ -226,29 +225,29 @@ int main(int argc, char *argv[]) {
 
 	//device memory allocation
 	float3 *s, *v, *a;
-	cudaError_t err10 = cudaMalloc((void**)&s, num_bodies * sizeof(float3));
+	cudaError_t err10 = cudaMalloc((void**)&s, total_elem * sizeof(float3));
 	if (err10 != cudaSuccess) {
 		printf("%s in %s at line %d\n", cudaGetErrorString(err10), __FILE__, __LINE__);
 	}
-	cudaError_t err11 = cudaMalloc((void**)&v, num_bodies * sizeof(float3));
+	cudaError_t err11 = cudaMalloc((void**)&v, total_elem * sizeof(float3));
 	if (err11 != cudaSuccess) {
 		printf("%s in %s at line %d\n", cudaGetErrorString(err11), __FILE__, __LINE__);
 	}
-	cudaError_t err12 = cudaMalloc((void**)&a, num_bodies * sizeof(float3));
+	cudaError_t err12 = cudaMalloc((void**)&a, total_elem * sizeof(float3));
 	if (err12 != cudaSuccess) {
 		printf("%s in %s at line %d\n", cudaGetErrorString(err12), __FILE__, __LINE__);
 	}
 
 	//copy initialized data from host to device
-	cudaError_t err20 = cudaMemcpy(s, h_s, num_bodies * sizeof(float3), cudaMemcpyHostToDevice);
+	cudaError_t err20 = cudaMemcpy(s, h_s, total_elem * sizeof(float3), cudaMemcpyHostToDevice);
 	if (err20 != cudaSuccess) {
 		printf("%s in %s at line %d\n", cudaGetErrorString(err20), __FILE__, __LINE__);
 	}
-	cudaError_t err21 = cudaMemcpy(v, h_v, num_bodies * sizeof(float3), cudaMemcpyHostToDevice);
+	cudaError_t err21 = cudaMemcpy(v, h_v, total_elem * sizeof(float3), cudaMemcpyHostToDevice);
 	if (err21 != cudaSuccess) {
 		printf("%s in %s at line %d\n", cudaGetErrorString(err21), __FILE__, __LINE__);
 	}
-	cudaError_t err22 = cudaMemcpy(a, h_a, num_bodies * sizeof(float3), cudaMemcpyHostToDevice);
+	cudaError_t err22 = cudaMemcpy(a, h_a, total_elem * sizeof(float3), cudaMemcpyHostToDevice);
 	if (err22 != cudaSuccess) {
 		printf("%s in %s at line %d\n", cudaGetErrorString(err22), __FILE__, __LINE__);
 	}
@@ -257,7 +256,7 @@ int main(int argc, char *argv[]) {
 	cpu_func(h_s,h_v,h_a,dt,num_bodies, num_iteration);
 	printf("gpu code is running....\n");
 	//run gpu code
-	gpu_func(s, v, a, h_s, h_a, dt, num_bodies, num_iteration);
+	gpu_func(s, v, a, h_s, h_a, dt, num_bodies, total_elem, num_iteration);
 
 	
 
