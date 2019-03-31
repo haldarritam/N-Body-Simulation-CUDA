@@ -191,8 +191,8 @@ __global__ void compute_Device (
 	const float *m, const unsigned long nElem)
 {
 	unsigned long tid = blockIdx.x * blockDim.x + threadIdx.x;
-	// if (tid == 0)
-	// 	printf("x: %.6f\ty:%.6f\n", i_r[0], i_r[1]);
+	if (tid == 0)
+		printf("x: %.6f\ty:%.6f\n", i_r[0], i_r[1]);
 
 	float ax_ip1 = 0.0, ay_ip1 = 0.0;
 	float dx_ip1, dy_ip1, rDistSquared, invDistCubed;
@@ -372,7 +372,7 @@ int main (int argc, char *argv[])
 		}
 	}
 	printf ("%lfs\n", getTimeStamp()-time0);
-	print_BodyStats(h_m, h_r1, h_v1, h_a1);
+	//print_BodyStats(h_m, h_r1, h_v1, h_a1);
 
 	// allocating space in device global memory for data
 	checkCudaErrors (cudaMalloc ((void**) &d_m,  nBytes));
@@ -404,21 +404,21 @@ int main (int argc, char *argv[])
 		if (iter % 2 == 0) {
 			compute_Device <<<grid, block, 0, 0>>> (d_r2, d_v2, d_a2, d_r1, d_v1, d_a1, d_m, nElem);
 			cudaDeviceSynchronize ();
-			cudaMemcpy(gref_m, d_m, nBytes, cudaMemcpyDeviceToHost);
-			cudaMemcpy(gref_r, d_r2, nBytes*2, cudaMemcpyDeviceToHost);
-			cudaMemcpy(gref_v, d_v2, nBytes*2, cudaMemcpyDeviceToHost);
-			cudaMemcpy(gref_a, d_a2, nBytes*2, cudaMemcpyDeviceToHost);
+			// cudaMemcpy(gref_m, d_m, nBytes, cudaMemcpyDeviceToHost);
+			// cudaMemcpy(gref_r, d_r2, nBytes*2, cudaMemcpyDeviceToHost);
+			// cudaMemcpy(gref_v, d_v2, nBytes*2, cudaMemcpyDeviceToHost);
+			// cudaMemcpy(gref_a, d_a2, nBytes*2, cudaMemcpyDeviceToHost);
 
 		} else {
 			compute_Device <<<grid, block, 0, 0>>> (d_r1, d_v1, d_a1, d_r2, d_v2, d_a2, d_m, nElem);
 			cudaDeviceSynchronize ();
-			cudaMemcpy(gref_m, d_m, nBytes, cudaMemcpyDeviceToHost);
-			cudaMemcpy(gref_r, d_r1, nBytes*2, cudaMemcpyDeviceToHost);
-			cudaMemcpy(gref_v, d_v1, nBytes*2, cudaMemcpyDeviceToHost);
-			cudaMemcpy(gref_a, d_a1, nBytes*2, cudaMemcpyDeviceToHost);
+			// cudaMemcpy(gref_m, d_m, nBytes, cudaMemcpyDeviceToHost);
+			// cudaMemcpy(gref_r, d_r1, nBytes*2, cudaMemcpyDeviceToHost);
+			// cudaMemcpy(gref_v, d_v1, nBytes*2, cudaMemcpyDeviceToHost);
+			// cudaMemcpy(gref_a, d_a1, nBytes*2, cudaMemcpyDeviceToHost);
 		}
-		if (iter%1000 == 0)
-			print_BodyStats (gref_m, gref_r, gref_v, gref_a);
+		// if (iter%1000 == 0)
+		// 	print_BodyStats (gref_m, gref_r, gref_v, gref_a);
 	}
 	double timestamp_GPU_end = getTimeStamp();
 	double elapsedTime = timestamp_GPU_end - timestamp_GPU_start;

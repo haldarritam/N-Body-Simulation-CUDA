@@ -8,7 +8,7 @@
 
 
 // global constants
-#define NUM_THREADS 8
+#define NUM_THREADS 32
 #define MAX_MASS 100.0f
 #define MAX_POS_X 100.0f
 #define MAX_POS_Y 100.0f
@@ -297,10 +297,13 @@ void *computeHost_SMT (void *arg)
 
 		pthread_mutex_unlock (&count_mutex);
 
-		if ((offset == 0) && (iter%1000 == 0)) {
-			//printf("x: %.6f\ty: %.6f\n", **o_r, *(*o_r+1));
-            print_BodyStats (iter+1);
+        if (offset == 0) {
+            printf("x: %.6f\ty: %.6f\n", **o_r, *(*o_r+1));
         }
+
+		// if ((offset == 0) && (iter%1000 == 0)) {
+  //           print_BodyStats (iter+1);
+  //       }
 	}
 
 	pthread_exit (NULL);
@@ -397,7 +400,7 @@ int main(int argc, char const *argv[])
         //  i, (long) status);
     }
     printf ("%lfs\n", getTimeStamp()-time0);
-    print_BodyStats (0);
+    //print_BodyStats (0);
 
     printf("\nBeginning CPU simulation ...\n");
 	double time1 = getTimeStamp();
