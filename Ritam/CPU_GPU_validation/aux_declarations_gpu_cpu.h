@@ -1,5 +1,5 @@
 #define BLOCK_SIZE 1024
-#define MASS       100
+#define MASS       10
 #define DT         0.001953125f
 #define EPS        0.0009765625f
 #define G          80

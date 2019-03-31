@@ -25,16 +25,22 @@ int main (const int argc, const char** argv) {
   switch(argc)
   {
     case 1:
-      printf("Default values considered, nBodies: 30000, nIters: 10.\n");
+      printf("------------------------------------------------------\n\n");
+      printf("Default values considered, nBodies: 30000, nIters: 10.\n\n");
+      printf("------------------------------------------------------\n\n");
     break;
     case 2:
       nBodies = atoi(argv[1]);
-      printf("Values considered, nBodies: %i, nIters: 10.\n", nBodies);
+      printf("------------------------------------------------------\n\n");
+      printf("Values considered, nBodies: %i, nIters: 10.\n\n", nBodies);
+      printf("------------------------------------------------------\n\n");
     break;
     case 3:
       nBodies = atoi(argv[1]);
       nIters = atoi(argv[2]);
-      printf("Values considered, nBodies: %i, nIters: %i.\n", nBodies, nIters);
+      printf("------------------------------------------------------\n\n");
+      printf("Values considered, nBodies: %i, nIters: %i.\n\n", nBodies, nIters);
+      printf("------------------------------------------------------\n\n");
     break;
     default:
       printf("ERR: Invalid number of arguments passed.\n"
@@ -47,7 +53,7 @@ int main (const int argc, const char** argv) {
   cpu_body_ds.dt = dt;
 
   // host side memory allocation for the GPU execution
-  int bytes = nBodies*sizeof(bodyStruct); // memory allocation
+  size_t bytes = nBodies*sizeof(bodyStruct); // memory allocation
   cudaMallocHost( (bodyStruct **) &h_body_ds, bytes );
 
   // memory allocation for the CPU execution
@@ -64,7 +70,10 @@ int main (const int argc, const char** argv) {
   // CPU multithreaded execution
   double timeStampB = getTimeStamp();
   for (iter = 0; iter < nIters; iter++) {
-    printf("CPU Validation: iter %i\tx:%f y:%f z:%f\n",iter+1, cpu_body_ds.buf[0].x, cpu_body_ds.buf[0].y, cpu_body_ds.buf[0].z);
+    if(iter%1000 == 0 && iter<1000)
+      printf("CPU Validation: iter %i\t\tx:%f y:%f z:%f\n",iter, cpu_body_ds.buf[0].x, cpu_body_ds.buf[0].y, cpu_body_ds.buf[0].z);
+    else if(iter%1000 == 0)
+      printf("CPU Validation: iter %i\tx:%f y:%f z:%f\n",iter, cpu_body_ds.buf[0].x, cpu_body_ds.buf[0].y, cpu_body_ds.buf[0].z);
     cpu_body_ds.tid = 0;
     for (i = 0; i < nBodies; i++)
       pthread_create(&threads[i], NULL, nbody_calculation_cpu, (void *) &cpu_body_ds);
@@ -77,6 +86,7 @@ int main (const int argc, const char** argv) {
     for (i = 0 ; i < nBodies; i++) {
       cpu_body_ds.buf[i].x += cpu_body_ds.buf[i].vx*dt;
       cpu_body_ds.buf[i].y += cpu_body_ds.buf[i].vy*dt;
+      cpu_body_ds.buf[i].z += cpu_body_ds.buf[i].vz*dt;
     }
 
   }
@@ -88,17 +98,28 @@ int main (const int argc, const char** argv) {
   cudaMalloc( (bodyStruct **) &d_body_ds, bytes ) ; 
 
   // determining the grid size
-  grid_size = ceil (nBodies / BLOCK_SIZE);
+  grid_size = (nBodies+BLOCK_SIZE-1)/BLOCK_SIZE;
 
   // initializing the dim3 variables
 
   dim3 block( BLOCK_SIZE, 1, 1 ) ; 
   dim3 grid( grid_size, 1, 1);
   FILE *fp=fopen("pos.txt","w");
+  
   // starting the iterations
+  printf("GPU Validation:\n");
   for (iter = 0; iter < nIters; iter++) {
-    
-    printf("GPU Validation: iter %i\tx:%f y:%f z:%f\n",iter+1, h_body_ds[0].x, h_body_ds[0].y, h_body_ds[0].z);
+    if(iter%1000==0) {
+      printf("iter:%i\n",iter);
+      printf("MASS 0\t\tMASS 1\t\tMASS 2\n");
+      printf("x:%f\tx:%f\tx:%f\n",h_body_ds[0].x,h_body_ds[1].x,h_body_ds[2].x);
+      printf("y:%f\ty:%f\ty:%f\n",h_body_ds[0].y,h_body_ds[1].y,h_body_ds[2].y);
+      printf("z:%f\tz:%f\tz:%f\n",h_body_ds[0].z,h_body_ds[1].z,h_body_ds[2].z);
+      printf("\n");
+    }
+    // printf("GPU Validation: iter %i\tx:%f y:%f z:%f\n",iter+1, h_body_ds[0].x, h_body_ds[0].y, h_body_ds[0].z);
+    // printf("GPU Validation: iter %i\tx:%f y:%f z:%f\n",iter+1, h_body_ds[0].x, h_body_ds[1].y, h_body_ds[1].z);
+    // printf("GPU Validation: iter %i\tx:%f y:%f z:%f\n",iter+1, h_body_ds[0].x, h_body_ds[2].y, h_body_ds[2].z);
     double timeStampA = getTimeStamp();
     // memcopy (host -> device)
     cudaMemcpy( d_body_ds, h_body_ds, bytes, cudaMemcpyHostToDevice  ) ;
@@ -118,7 +139,7 @@ int main (const int argc, const char** argv) {
     }
 
     double timeStampD = getTimeStamp();
-
+    gpuErrchk(cudaPeekAtLastError());
     for (i = 0 ; i < nBodies; i++) { 
      fprintf(fp,"%.6f %.6f %.6f\n",h_body_ds[i].x, h_body_ds[i].y, h_body_ds[i].z);
     }
@@ -133,15 +154,16 @@ int main (const int argc, const char** argv) {
 
   // free memory
   free(addr);
-  cudaFreeHost( h_body_ds );
-  cudaFree( d_body_ds   ) ; 
+  free(threads);
+  cudaFreeHost(h_body_ds);
+  cudaFree(d_body_ds) ; 
   cudaDeviceReset() ;
   return 0;
 }
 
 void initialize_bodies(bodyStruct *b, bodyStruct *c, int n) {
   int i = 0;
-  srand(time(0));
+  srand(1000);//time(0));
   for (i = 0; i < n; i++) {
     b[i].m = MASS;
     b[i].x = 2.0f * ((rand() / (float)RAND_MAX) * 100.0f) - 100.0f;
