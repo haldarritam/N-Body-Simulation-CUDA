@@ -8,6 +8,7 @@
 #define EPS 1e-9f
 #define NUM_THREADS 32
 #define BLOCK_DIM 32
+#define G 100
 
 pthread_mutex_t mutex_tid;
 
@@ -71,7 +72,7 @@ void* h_acce(void *arg){
 		    float distSqr = r.x * r.x + r.y * r.y + r.z * r.z + EPS;
             float distSixth = distSqr * distSqr * distSqr;
             float invDistCube = 1.0f/sqrtf(distSixth);
-            float s = X[j].w * invDistCube;
+            float s = X[j].w * invDistCube * G;
 				
             A[i].x += r.x * s;
             A[i].y += r.y * s;
@@ -179,17 +180,17 @@ void h_func(nbodyStruct *nbody){
 	pthread_t *threads = (pthread_t*) malloc(NUM_THREADS * sizeof(pthread_t));
 	
 	h_preprocess(nbody, threads);
-	int i = 1;
+	int i = 0;
 	
+	FILE *f = fopen("position.txt", "w");
 	while (i < maxIteration){
 		i++;
 		h_inte(nbody, threads);
 		
-		FILE *f = fopen("position.txt", "w");
         for (int j = 0; j < noElems; j++)
             fprintf(f, "%.6f %.6f %.6f\n", X[j].x, X[j].y, X[j].z);
-        fclose(f);
 	}
+	fclose(f);
 	
 	double timeStampB = getTimeStamp() ;
 	printf("%.6f\n", timeStampB - timeStampA);
@@ -213,7 +214,7 @@ __device__ float3 bodyBodyInteraction(float4 bi, float4 bj, float3 ai)
     float distSqr = r.x * r.x + r.y * r.y + r.z * r.z + EPS;
     float distSixth = distSqr * distSqr * distSqr;
     float invDistCube = 1.0f/sqrtf(distSixth);
-    float s = bj.w * invDistCube;
+    float s = bj.w * invDistCube * G;
 
     ai.x += r.x * s;
     ai.y += r.y * s;
@@ -221,11 +222,11 @@ __device__ float3 bodyBodyInteraction(float4 bi, float4 bj, float3 ai)
     return ai;
 }
 
-__device__ float3 tile_calculation(float4 myPosition, float3 accel)
+__device__ float3 tile_calculation(float4 myPosition, float3 accel, int sharedPositionLength)
 {
     int i;
-    extern __shared__ float4 sharedPosition[];
-    for (i = 0; i < blockDim.x; i++) {
+    __shared__ float4 sharedPosition[BLOCK_DIM];
+    for (i = 0; i < sharedPositionLength; i++) {
         accel = bodyBodyInteraction(myPosition, sharedPosition[i], accel);
     }
     return accel;
@@ -234,17 +235,20 @@ __device__ float3 tile_calculation(float4 myPosition, float3 accel)
 // device-side acceleration compution
 __device__ void d_acce(float4 *X, float3 *A, int noElems)
 {
-    extern __shared__ float4 sharedPosition[];
+    __shared__ float4 sharedPosition[BLOCK_DIM];
     float4 myPosition;
     int i, tile;
     float3 acc = {0.0f, 0.0f, 0.0f};
     int gtid = blockIdx.x * blockDim.x + threadIdx.x;
+	if (gtid >= noElems) return;
     myPosition = X[gtid];
     for (i = 0, tile = 0; i < noElems; i += blockDim.x, tile++) {
         int idx = tile * blockDim.x + threadIdx.x;
 		if (idx < noElems) sharedPosition[threadIdx.x] = X[idx];
+		int sharedPositionLength = noElems - tile * blockDim.x;
+		if (sharedPositionLength > blockDim.x) sharedPositionLength = blockDim.x;
         __syncthreads();
-        acc = tile_calculation(myPosition, acc);
+        acc = tile_calculation(myPosition, acc, sharedPositionLength);
         __syncthreads();
     }
     // Save the result in global memory for the integration step.
@@ -286,8 +290,9 @@ void d_func(float4* d_X, float3 *d_V, float3* d_A, float4 *h_X, float dt, int no
 	double timeStampA = getTimeStamp() ;
 	
 	d_preprocess<<<(noElems + BLOCK_DIM - 1) / BLOCK_DIM, BLOCK_DIM>>>(d_X, d_V, d_A, dt, noElems);
-	int i = 1;
+	int i = 0;
 	
+	FILE *f = fopen("position2.txt", "w");
 	while (i < maxIteration){
 		i++;
 		
@@ -296,11 +301,12 @@ void d_func(float4* d_X, float3 *d_V, float3* d_A, float4 *h_X, float dt, int no
 		
 		cudaMemcpy( h_X, d_X, noElems * sizeof(float4), cudaMemcpyDeviceToHost );
 		
-		FILE *f = fopen("position2.txt", "w");
+		//FILE *f = fopen("position2.txt", "w");
         for (int j = 0; j < noElems; j++)
             fprintf(f, "%.6f %.6f %.6f\n", h_X[j].x, h_X[j].y, h_X[j].z);
-        fclose(f);
+        //fclose(f);
 	}
+	fclose(f);
 	
 	double timeStampB = getTimeStamp() ;
 	printf("%.6f\n", timeStampB - timeStampA);
