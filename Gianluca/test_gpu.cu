@@ -259,7 +259,7 @@ int main (int argc, char *argv[])
 	printf("  CUDA Capability Major/Minor version number: %d.%d\n",
 		deviceProp.major, deviceProp.minor);
 	printf("  Number of SMs: %d\n", deviceProp.multiProcessorCount);
-	printf("  Total amount of global memory: %.2f MB (%llu B)\n",
+	printf("  Total amount of global memory: %.2f GB (%llu B)\n",
 		(float) deviceProp.totalGlobalMem/pow(1024.0,3),
 		(unsigned long long) deviceProp.totalGlobalMem);
 	printf("  Total amount of constant memory: %4.2f kB\n", 
