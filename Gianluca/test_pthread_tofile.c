@@ -167,7 +167,7 @@ void *init_Acceleration_SMT (void *arg)
 
 	unsigned long i, j;
 	float ax_ip1, ay_ip1, az_ip1;
-	float dx_ip1, dy_ip1, dz_ip1, rDistSquared, GMinvDistCubed;
+	float dx_ip1, dy_ip1, dz_ip1, rDistSquared, MinvDistCubed;
 	float **i_r = &(US.r1);
 	float **o_a = &(US.a1);
 
@@ -182,15 +182,15 @@ void *init_Acceleration_SMT (void *arg)
 			dy_ip1 = *(*i_r + (ND*j+1)) - *(*i_r + (ND*i+1));
 			dz_ip1 = *(*i_r + (ND*j+2)) - *(*i_r + (ND*i+2));
 			rDistSquared = dx_ip1*dx_ip1 + dy_ip1*dy_ip1 + dz_ip1*dz_ip1 + SOFTENING;
-			GMinvDistCubed = G*US.m[j]/sqrtf(rDistSquared*rDistSquared*rDistSquared);
-			ax_ip1 += dx_ip1 * GMinvDistCubed;
-			ay_ip1 += dy_ip1 * GMinvDistCubed;
-			az_ip1 += dz_ip1 * GMinvDistCubed;
+			MinvDistCubed = US.m[j]/sqrtf(rDistSquared*rDistSquared*rDistSquared);
+			ax_ip1 += dx_ip1 * MinvDistCubed;
+			ay_ip1 += dy_ip1 * MinvDistCubed;
+			az_ip1 += dz_ip1 * MinvDistCubed;
 		}
 
-		*(*o_a + (ND*i+0)) = ax_ip1;
-		*(*o_a + (ND*i+1)) = ay_ip1;
-		*(*o_a + (ND*i+2)) = az_ip1;
+		*(*o_a + (ND*i+0)) = G*ax_ip1;
+		*(*o_a + (ND*i+1)) = G*ay_ip1;
+		*(*o_a + (ND*i+2)) = G*az_ip1;
 	}
 
 	pthread_exit (NULL);
@@ -211,7 +211,7 @@ void *computeHost_SMT (void *arg)
 
 	unsigned long i, j;
 	float ax_ip1, ay_ip1, az_ip1;
-	float dx_ip1, dy_ip1, dz_ip1, rDistSquared, GMinvDistCubed;
+	float dx_ip1, dy_ip1, dz_ip1, rDistSquared, MinvDistCubed;
 	float **i_r, **i_v, **i_a;
 	float **o_r, **o_v, **o_a;
 	for (unsigned long iter=0; iter<nIter; iter++) {
@@ -278,10 +278,10 @@ void *computeHost_SMT (void *arg)
 				dy_ip1 = *(*o_r + (ND*j+1)) - *(*o_r + (ND*i+1));
 				dz_ip1 = *(*o_r + (ND*j+2)) - *(*o_r + (ND*i+2));
 				rDistSquared = dx_ip1*dx_ip1 + dy_ip1*dy_ip1 + dz_ip1*dz_ip1 + SOFTENING;
-				GMinvDistCubed = G*US.m[j]/sqrtf(rDistSquared*rDistSquared*rDistSquared);
-				ax_ip1 += dx_ip1 * GMinvDistCubed;
-				ay_ip1 += dy_ip1 * GMinvDistCubed;
-				az_ip1 += dz_ip1 * GMinvDistCubed;
+				MinvDistCubed = US.m[j]/sqrtf(rDistSquared*rDistSquared*rDistSquared);
+				ax_ip1 += dx_ip1 * MinvDistCubed;
+				ay_ip1 += dy_ip1 * MinvDistCubed;
+				az_ip1 += dz_ip1 * MinvDistCubed;
 
 				j++; // unroll #1
 
@@ -289,10 +289,10 @@ void *computeHost_SMT (void *arg)
 				dy_ip1 = *(*o_r + (ND*j+1)) - *(*o_r + (ND*i+1));
 				dz_ip1 = *(*o_r + (ND*j+2)) - *(*o_r + (ND*i+2));
 				rDistSquared = dx_ip1*dx_ip1 + dy_ip1*dy_ip1 + dz_ip1*dz_ip1 + SOFTENING;
-				GMinvDistCubed = G*US.m[j]/sqrtf(rDistSquared*rDistSquared*rDistSquared);
-				ax_ip1 += dx_ip1 * GMinvDistCubed;
-				ay_ip1 += dy_ip1 * GMinvDistCubed;
-				az_ip1 += dz_ip1 * GMinvDistCubed;
+				MinvDistCubed = US.m[j]/sqrtf(rDistSquared*rDistSquared*rDistSquared);
+				ax_ip1 += dx_ip1 * MinvDistCubed;
+				ay_ip1 += dy_ip1 * MinvDistCubed;
+				az_ip1 += dz_ip1 * MinvDistCubed;
 
 				j++; // unroll #2
 
@@ -300,10 +300,10 @@ void *computeHost_SMT (void *arg)
 				dy_ip1 = *(*o_r + (ND*j+1)) - *(*o_r + (ND*i+1));
 				dz_ip1 = *(*o_r + (ND*j+2)) - *(*o_r + (ND*i+2));
 				rDistSquared = dx_ip1*dx_ip1 + dy_ip1*dy_ip1 + dz_ip1*dz_ip1 + SOFTENING;
-				GMinvDistCubed = G*US.m[j]/sqrtf(rDistSquared*rDistSquared*rDistSquared);
-				ax_ip1 += dx_ip1 * GMinvDistCubed;
-				ay_ip1 += dy_ip1 * GMinvDistCubed;
-				az_ip1 += dz_ip1 * GMinvDistCubed;
+				MinvDistCubed = US.m[j]/sqrtf(rDistSquared*rDistSquared*rDistSquared);
+				ax_ip1 += dx_ip1 * MinvDistCubed;
+				ay_ip1 += dy_ip1 * MinvDistCubed;
+				az_ip1 += dz_ip1 * MinvDistCubed;
 
 				j++; // unroll #3
 
@@ -311,10 +311,10 @@ void *computeHost_SMT (void *arg)
 				dy_ip1 = *(*o_r + (ND*j+1)) - *(*o_r + (ND*i+1));
 				dz_ip1 = *(*o_r + (ND*j+2)) - *(*o_r + (ND*i+2));
 				rDistSquared = dx_ip1*dx_ip1 + dy_ip1*dy_ip1 + dz_ip1*dz_ip1 + SOFTENING;
-				GMinvDistCubed = G*US.m[j]/sqrtf(rDistSquared*rDistSquared*rDistSquared);
-				ax_ip1 += dx_ip1 * GMinvDistCubed;
-				ay_ip1 += dy_ip1 * GMinvDistCubed;
-				az_ip1 += dz_ip1 * GMinvDistCubed;
+				MinvDistCubed = US.m[j]/sqrtf(rDistSquared*rDistSquared*rDistSquared);
+				ax_ip1 += dx_ip1 * MinvDistCubed;
+				ay_ip1 += dy_ip1 * MinvDistCubed;
+				az_ip1 += dz_ip1 * MinvDistCubed;
 
 				j++; // unroll #4
 
@@ -322,10 +322,10 @@ void *computeHost_SMT (void *arg)
 				dy_ip1 = *(*o_r + (ND*j+1)) - *(*o_r + (ND*i+1));
 				dz_ip1 = *(*o_r + (ND*j+2)) - *(*o_r + (ND*i+2));
 				rDistSquared = dx_ip1*dx_ip1 + dy_ip1*dy_ip1 + dz_ip1*dz_ip1 + SOFTENING;
-				GMinvDistCubed = G*US.m[j]/sqrtf(rDistSquared*rDistSquared*rDistSquared);
-				ax_ip1 += dx_ip1 * GMinvDistCubed;
-				ay_ip1 += dy_ip1 * GMinvDistCubed;
-				az_ip1 += dz_ip1 * GMinvDistCubed;
+				MinvDistCubed = US.m[j]/sqrtf(rDistSquared*rDistSquared*rDistSquared);
+				ax_ip1 += dx_ip1 * MinvDistCubed;
+				ay_ip1 += dy_ip1 * MinvDistCubed;
+				az_ip1 += dz_ip1 * MinvDistCubed;
 
 				j++; // unroll #5
 
@@ -333,10 +333,10 @@ void *computeHost_SMT (void *arg)
 				dy_ip1 = *(*o_r + (ND*j+1)) - *(*o_r + (ND*i+1));
 				dz_ip1 = *(*o_r + (ND*j+2)) - *(*o_r + (ND*i+2));
 				rDistSquared = dx_ip1*dx_ip1 + dy_ip1*dy_ip1 + dz_ip1*dz_ip1 + SOFTENING;
-				GMinvDistCubed = G*US.m[j]/sqrtf(rDistSquared*rDistSquared*rDistSquared);
-				ax_ip1 += dx_ip1 * GMinvDistCubed;
-				ay_ip1 += dy_ip1 * GMinvDistCubed;
-				az_ip1 += dz_ip1 * GMinvDistCubed;
+				MinvDistCubed = US.m[j]/sqrtf(rDistSquared*rDistSquared*rDistSquared);
+				ax_ip1 += dx_ip1 * MinvDistCubed;
+				ay_ip1 += dy_ip1 * MinvDistCubed;
+				az_ip1 += dz_ip1 * MinvDistCubed;
 
 				j++; // unroll #6
 
@@ -345,10 +345,10 @@ void *computeHost_SMT (void *arg)
 				dz_ip1 = *(*o_r + (ND*j+2)) - *(*o_r + (ND*i+2));
 
 				rDistSquared = dx_ip1*dx_ip1 + dy_ip1*dy_ip1 + dz_ip1*dz_ip1 + SOFTENING;
-				GMinvDistCubed = G*US.m[j]/sqrtf(rDistSquared*rDistSquared*rDistSquared);
-				ax_ip1 += dx_ip1 * GMinvDistCubed;
-				ay_ip1 += dy_ip1 * GMinvDistCubed;
-				az_ip1 += dz_ip1 * GMinvDistCubed;
+				MinvDistCubed = US.m[j]/sqrtf(rDistSquared*rDistSquared*rDistSquared);
+				ax_ip1 += dx_ip1 * MinvDistCubed;
+				ay_ip1 += dy_ip1 * MinvDistCubed;
+				az_ip1 += dz_ip1 * MinvDistCubed;
 
 				j++; // unroll #7
 
@@ -356,17 +356,17 @@ void *computeHost_SMT (void *arg)
 				dy_ip1 = *(*o_r + (ND*j+1)) - *(*o_r + (ND*i+1));
 				dz_ip1 = *(*o_r + (ND*j+2)) - *(*o_r + (ND*i+2));
 				rDistSquared = dx_ip1*dx_ip1 + dy_ip1*dy_ip1 + dz_ip1*dz_ip1 + SOFTENING;
-				GMinvDistCubed = G*US.m[j]/sqrtf(rDistSquared*rDistSquared*rDistSquared);
-				ax_ip1 += dx_ip1 * GMinvDistCubed;
-				ay_ip1 += dy_ip1 * GMinvDistCubed;
-				az_ip1 += dz_ip1 * GMinvDistCubed;
+				MinvDistCubed = US.m[j]/sqrtf(rDistSquared*rDistSquared*rDistSquared);
+				ax_ip1 += dx_ip1 * MinvDistCubed;
+				ay_ip1 += dy_ip1 * MinvDistCubed;
+				az_ip1 += dz_ip1 * MinvDistCubed;
 
 				j++; // unroll #8
 			}
 			
-			*(*o_a + (ND*i+0)) = ax_ip1;
-			*(*o_a + (ND*i+1)) = ay_ip1;
-			*(*o_a + (ND*i+2)) = ay_ip1;
+			*(*o_a + (ND*i+0)) = G*ax_ip1;
+			*(*o_a + (ND*i+1)) = G*ay_ip1;
+			*(*o_a + (ND*i+2)) = G*az_ip1;
 
 			*(*o_v + (ND*i+0)) = *(*i_v + (ND*i+0)) + (*(*i_a + (ND*i+0))+ax_ip1)*DT/2;
 			*(*o_v + (ND*i+1)) = *(*i_v + (ND*i+1)) + (*(*i_a + (ND*i+1))+ay_ip1)*DT/2;
