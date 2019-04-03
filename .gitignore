@@ -1,4 +1,5 @@
 .vscode
 Gianluca/*.o
+Gianluca/*.out
 Gianluca/results.txt
 
