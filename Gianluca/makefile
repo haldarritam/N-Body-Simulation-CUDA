@@ -1,7 +1,7 @@
 CC=gcc
 NVCC=nvcc
 CFLAGS=-I -Wall -pthread -std=c11 -g
-NVFLAGS=-ccbin clang++-3.8 -arch=sm_52
+NVFLAGS=-arch=sm_52
 
 LIBS=-lm
 
