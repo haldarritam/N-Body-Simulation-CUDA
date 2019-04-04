@@ -1,0 +1,5 @@
+2019-04-03
+GPU: naive (16384 bodies, 1000 iterations)
+Time per iteration: 0.007120s
+
+

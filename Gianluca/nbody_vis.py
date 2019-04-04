@@ -5,7 +5,7 @@ import matplotlib.animation
 import pandas as pd
 import os, sys
 
-NUM_BODIES = 1024
+NUM_BODIES = 4096
 NUM_ITER = 5000
 MAX_POS = 12500
 
