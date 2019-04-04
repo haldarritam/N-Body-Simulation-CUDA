@@ -1,6 +1,9 @@
 .vscode
 Gianluca/*.o
 Gianluca/*.out
+Gianluca/modular/*.o*
+Gianluca/modular/*.csv
+Gianluca/modular/results.txt
 Gianluca/results.txt
 Gianluca/CUDA_samples
 
