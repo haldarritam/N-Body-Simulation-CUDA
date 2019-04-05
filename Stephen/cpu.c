@@ -186,8 +186,8 @@ void h_inte(nbodyStruct *nbody, pthread_t *threads){
 
 // host-side function
 void h_func(nbodyStruct *nbody){
-	float4 *X = nbody -> X;
-	int noElems = nbody -> noElems;
+	//float4 *X = nbody -> X;
+	//int noElems = nbody -> noElems;
 	int maxIteration = nbody -> maxIteration;
 
 	double timeStampA = getTimeStamp();
@@ -202,8 +202,8 @@ void h_func(nbodyStruct *nbody){
 		  i++;
 		  h_inte(nbody, threads);
 
-      for (int j = 0; j < noElems; j++)
-          fprintf(f, "%.6f %.6f %.6f\n", X[j].x, X[j].y, X[j].z);
+/*      for (int j = 0; j < noElems; j++)*/
+/*          fprintf(f, "%.6f %.6f %.6f\n", X[j].x, X[j].y, X[j].z);*/
 	}
 	fclose(f);
 
@@ -239,6 +239,18 @@ int main( int argc, char *argv[] ) {
 
     // init matrices with random data
     initData(h_X, h_V, noElems) ;
-
+	
+	double time1 = getTimeStamp();
     h_func(h_nbody);
+    double time2 = getTimeStamp();
+    double elapsedTime = time2-time1;
+    printf("Elapsed Time: %.4lfs\n", elapsedTime);
+    printf("Elapsed Time per Iteration: %.4lfs\n", elapsedTime/maxIteration);
+    
+    return 0;
 }
+
+
+
+
+

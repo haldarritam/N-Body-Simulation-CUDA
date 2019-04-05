@@ -393,9 +393,9 @@ void *computeHost_SMT (void *arg)
 
 		pthread_mutex_unlock (&count_mutex);
 
-		if (offset == 0) {
-			printf("%ld:\tx: %.6f\ty: %.6f\tz: %.6f\n", iter, **o_r, *(*o_r+1), *(*o_r+2));
-		}
+/*		if (offset == 0) {*/
+/*			printf("%ld:\tx: %.6f\ty: %.6f\tz: %.6f\n", iter, **o_r, *(*o_r+1), *(*o_r+2));*/
+/*		}*/
 
 		// if ((offset == 0) && (iter%1000 == 0)) {
 			// print_BodyStats (iter+1);
