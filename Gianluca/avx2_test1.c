@@ -29,6 +29,7 @@ void initialize (float *a, float *b, float *c, const unsigned nElem)
 void addition_avx (const float *a, const float *b, float *c, const unsigned nElem)
 {
 	__m256 a_avx, b_avx, c_avx;
+	#pragma GCC unroll 8
 	for (unsigned int i=0; i<nElem; i += 8) {
 		a_avx = _mm256_load_ps (&a[i]);
 		b_avx = _mm256_load_ps (&b[i]);
@@ -39,6 +40,7 @@ void addition_avx (const float *a, const float *b, float *c, const unsigned nEle
 
 void addition_normal (const float *a, const float *b, float *c, const unsigned nElem)
 {
+	#pragma GCC unroll 4
 	for (unsigned int i=0; i<nElem; i++)
 		c[i] = a[i] + b[i];
 }
@@ -53,6 +55,7 @@ void print_vectors (const float *a, const float *b, const float *c, const unsign
 
 bool compare (const float *c1, const float *c2, const unsigned nElem)
 {
+	#pragma GCC unroll 4
 	for (unsigned int i=0; i<nElem; i++)
 		if (c1[i] != c2[i]) return false;
 	

@@ -1,20 +1,20 @@
 #include "nbody_helper.h"
 #include "nbody_helper_cuda.h"
 
-__global__ void bodyBodyInteraction (float3 ai, float *o_r, float *m, unsigned int j, unsigned int i)
-{
-	float3 r;
-	r.x = o_r[ND*j]   - o_r[ND*i];
-	r.y = o_r[ND*j+1] - o_r[ND*i+1];
-	r.z = o_r[ND*j+2] - o_r[ND*i+2];
-	
-	float rDistSquared = r.x*r.x + r.y*r.y + r.z*r.z + SOFTENING;
-	float MinvDistCubed = m[j] * rsqrtf(rDistSquared*rDistSquared*rDistSquared);
-	
-	ai.x = r.x * MinvDistCubed;
-	ai.y = r.y * MinvDistCubed;
-	ai.z = r.z * MinvDistCubed;
-}
+//__global__ void bodyBodyInteraction (float3 ai, float *o_r, float *m, unsigned int j, unsigned int i)
+//{
+//	float3 r;
+//	r.x = o_r[ND*j]   - o_r[ND*i];
+//	r.y = o_r[ND*j+1] - o_r[ND*i+1];
+//	r.z = o_r[ND*j+2] - o_r[ND*i+2];
+//	
+//	float rDistSquared = r.x*r.x + r.y*r.y + r.z*r.z + SOFTENING;
+//	float MinvDistCubed = m[j] * rsqrtf(rDistSquared*rDistSquared*rDistSquared);
+//	
+//	ai.x = r.x * MinvDistCubed;
+//	ai.y = r.y * MinvDistCubed;
+//	ai.z = r.z * MinvDistCubed;
+//}
 
 __global__ void compute_Device (
 	float *o_r, float *o_v, float *o_a, 
