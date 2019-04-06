@@ -16,7 +16,7 @@ int main (const int argc, const char** argv) {
   float dt = DT; // time step
   int nIters = 10;  // simulation iterations
   int i = 0, iter = 0, grid_size = 0;
-  double total_time = 0;
+  double total_time_cpu = 0, total_time_gpu = 0;
 
   thread_arg cpu_body_ds;
   bodyStruct *h_body_ds, *d_body_ds;
@@ -63,36 +63,6 @@ int main (const int argc, const char** argv) {
   // initializing the data structures
   initialize_bodies(h_body_ds, addr, nBodies);
 
-  // memory for pthreads
-  int pBytes = nBodies*sizeof(pthread_t);
-  pthread_t *threads = (pthread_t*)malloc(pBytes);
-
-  // CPU multithreaded execution
-  double timeStampB = getTimeStamp();
-  for (iter = 0; iter < nIters; iter++) {
-    if(iter%1000 == 0 && iter<1000)
-      printf("CPU Validation: iter %i\t\tx:%f y:%f z:%f\n",iter, cpu_body_ds.buf[0].x, cpu_body_ds.buf[0].y, cpu_body_ds.buf[0].z);
-    else if(iter%1000 == 0)
-      printf("CPU Validation: iter %i\tx:%f y:%f z:%f\n",iter, cpu_body_ds.buf[0].x, cpu_body_ds.buf[0].y, cpu_body_ds.buf[0].z);
-    cpu_body_ds.tid = 0;
-    for (i = 0; i < nBodies; i++)
-      pthread_create(&threads[i], NULL, nbody_calculation_cpu, (void *) &cpu_body_ds);
-
-    // sync the threads
-    for (i = 0; i < nBodies; i++) 
-      pthread_join(threads[i], NULL);
-
-    // integrate and find the new positions
-    for (i = 0 ; i < nBodies; i++) {
-      cpu_body_ds.buf[i].x += cpu_body_ds.buf[i].vx*dt;
-      cpu_body_ds.buf[i].y += cpu_body_ds.buf[i].vy*dt;
-      cpu_body_ds.buf[i].z += cpu_body_ds.buf[i].vz*dt;
-    }
-
-  }
-  double timeStampC = getTimeStamp();
-
-  printf("\n");
   // Device side memory allocation
 
   cudaMalloc( (bodyStruct **) &d_body_ds, bytes ) ; 
@@ -104,22 +74,22 @@ int main (const int argc, const char** argv) {
 
   dim3 block( BLOCK_SIZE, 1, 1 ) ; 
   dim3 grid( grid_size, 1, 1);
-  FILE *fp=fopen("pos.txt","w");
+  FILE *fp=fopen("out.csv","w");
   
   // starting the iterations
-  printf("GPU Validation:\n");
+  printf("---------GPU Validation---------\n");
   for (iter = 0; iter < nIters; iter++) {
-    if(iter%1000==0) {
+    
+    // print statements
+    if(iter%(nIters/3)==0) {
       printf("iter:%i\n",iter);
-      printf("MASS 0\t\tMASS 1\t\tMASS 2\n");
-      printf("x:%f\tx:%f\tx:%f\n",h_body_ds[0].x,h_body_ds[1].x,h_body_ds[2].x);
-      printf("y:%f\ty:%f\ty:%f\n",h_body_ds[0].y,h_body_ds[1].y,h_body_ds[2].y);
-      printf("z:%f\tz:%f\tz:%f\n",h_body_ds[0].z,h_body_ds[1].z,h_body_ds[2].z);
+      printf("MASS 0\t\t\tMASS 1\t\t\tMASS 2\n");
+      printf("x:%.04f\t\tx:%.04f\t\tx:%.04f\n",h_body_ds[0].x,h_body_ds[1].x,h_body_ds[2].x);
+      printf("y:%.04f\t\ty:%.04f\t\ty:%.04f\n",h_body_ds[0].y,h_body_ds[1].y,h_body_ds[2].y);
+      printf("z:%.04f\t\tz:%.04f\t\tz:%.04f\n",h_body_ds[0].z,h_body_ds[1].z,h_body_ds[2].z);
       printf("\n");
     }
-    // printf("GPU Validation: iter %i\tx:%f y:%f z:%f\n",iter+1, h_body_ds[0].x, h_body_ds[0].y, h_body_ds[0].z);
-    // printf("GPU Validation: iter %i\tx:%f y:%f z:%f\n",iter+1, h_body_ds[0].x, h_body_ds[1].y, h_body_ds[1].z);
-    // printf("GPU Validation: iter %i\tx:%f y:%f z:%f\n",iter+1, h_body_ds[0].x, h_body_ds[2].y, h_body_ds[2].z);
+
     double timeStampA = getTimeStamp();
     // memcopy (host -> device)
     cudaMemcpy( d_body_ds, h_body_ds, bytes, cudaMemcpyHostToDevice  ) ;
@@ -141,15 +111,53 @@ int main (const int argc, const char** argv) {
     double timeStampD = getTimeStamp();
     gpuErrchk(cudaPeekAtLastError());
     for (i = 0 ; i < nBodies; i++) { 
-     fprintf(fp,"%.6f %.6f %.6f\n",h_body_ds[i].x, h_body_ds[i].y, h_body_ds[i].z);
+     fprintf(fp,"%.6f,%.6f,%.6f\n",h_body_ds[i].x, h_body_ds[i].y, h_body_ds[i].z);
     }
-    total_time = total_time + (timeStampD - timeStampA);
+    total_time_gpu = total_time_gpu + (timeStampD - timeStampA);
   }
-  fclose(fp);
+  printf("\n");
+  // memory for pthreads
+  size_t pBytes = nBodies*sizeof(pthread_t);
+  pthread_t *threads = (pthread_t*)malloc(pBytes);
+
+  // CPU multithreaded execution  
+  printf("---------CPU Validation---------\n");
+  for (iter = 0; iter < nIters; iter++) {
+    
+    // print statements
+    // printf("Iteration: %i\n", iter);
+    if(iter%(nIters/3)==0) {
+      printf("iter:%i\n",iter);
+      printf("MASS 0\t\t\tMASS 1\t\t\tMASS 2\n");
+      printf("x:%.04f\t\tx:%.04f\t\tx:%.04f\n",cpu_body_ds.buf[0].x,cpu_body_ds.buf[1].x,cpu_body_ds.buf[2].x);
+      printf("y:%.04f\t\ty:%.04f\t\ty:%.04f\n",cpu_body_ds.buf[0].y,cpu_body_ds.buf[1].y,cpu_body_ds.buf[2].y);
+      printf("z:%.04f\t\tz:%.04f\t\tz:%.04f\n",cpu_body_ds.buf[0].z,cpu_body_ds.buf[1].z,cpu_body_ds.buf[2].z);
+      printf("\n");
+    }
+    
+    double timeStampB = getTimeStamp();
+    cpu_body_ds.tid = 0;
+    for (i = 0; i < nBodies; i++)
+      pthread_create(&threads[i], NULL, nbody_calculation_cpu, (void *) &cpu_body_ds);
+
+    // sync the threads
+    for (i = 0; i < nBodies; i++) 
+      pthread_join(threads[i], NULL);
+
+    // integrate and find the new positions
+    for (i = 0 ; i < nBodies; i++) {
+      cpu_body_ds.buf[i].x += cpu_body_ds.buf[i].vx*dt;
+      cpu_body_ds.buf[i].y += cpu_body_ds.buf[i].vy*dt;
+      cpu_body_ds.buf[i].z += cpu_body_ds.buf[i].vz*dt;
+    }
+    double timeStampC = getTimeStamp();
+    total_time_cpu = total_time_cpu + (timeStampC - timeStampB);
+  }
+  // fclose(fp);
   // printf statements
   printf("\n");
-  printf("CPU -- Total Time Taken: %lf\n", (timeStampC - timeStampB));
-  printf("GPU -- Total Time Taken: %lf\n", total_time);
+  printf("CPU -- Total Time Taken: %lf\n", total_time_cpu);
+  printf("GPU -- Total Time Taken: %lf\n", total_time_gpu);
   printf("\n");
 
   // free memory
@@ -197,7 +205,6 @@ void* nbody_calculation_cpu(void* arg) {
     int i = b->tid;
     b->tid++;
   pthread_mutex_unlock(&mutex_tid); 
-  
   int j = 0;
   float dx = 0.0f, 
         dy = 0.0f,
@@ -218,6 +225,7 @@ void* nbody_calculation_cpu(void* arg) {
     invDist3 = (G * b->buf[j].m)/sqrt(distSqr3);
 
     sx += dx * invDist3; sy += dy * invDist3; sz += dz * invDist3;
+    // printf("i: %i\n", i);
   }
 
   // acceleration calculation

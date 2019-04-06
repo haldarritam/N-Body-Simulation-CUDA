@@ -1,3 +1,6 @@
+#ifndef __AUX_DECLARATIONS_GPU_CPU_H
+#define __AUX_DECLARATIONS_GPU_CPU_H
+
 #define BLOCK_SIZE 1024
 #define MASS       10
 #define DT         0.001953125f
@@ -20,3 +23,5 @@ typedef struct thread_arg {
 void initialize_bodies(bodyStruct *, bodyStruct *, int);
 void* nbody_calculation_cpu(void*);
 __global__ void nbody_calculation_gpu(bodyStruct*, float, int);
+
+#endif
