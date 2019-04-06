@@ -1,7 +1,7 @@
 CC=gcc
 NVCC=nvcc
 CFLAGS=-I -Wall -pthread -std=c11 -g
-NVFLAGS=-arch=sm_52 -Xcompiler="-pthread -Wall"
+NVFLAGS=-ccbin gcc -I -m64 -gencode arch=compute_50,code=sm_50 -gencode arch=compute_52,code=sm_52 -Xcompiler="-pthread -Wall"
 
 LIBS=-lm
 

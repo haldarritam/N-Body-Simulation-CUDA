@@ -201,7 +201,6 @@ int main (int argc, char *argv[])
 	double timestamp_GPU_start = getTimeStamp();
 	for (unsigned long iter=0; iter<nIter; iter++) {
 		if (iter % 2 == 0) {
-			printf("iter = %ld\n", iter);
 			compute_Device <<<grid, block, 0, 0>>> (d_r2, d_v2, d_a2, d_r1, d_v1, d_a1, d_m, nElem);
 			cudaDeviceSynchronize ();
 			// cudaMemcpy(gref_m, d_m, nBytes, cudaMemcpyDeviceToHost);
@@ -210,7 +209,6 @@ int main (int argc, char *argv[])
 			// cudaMemcpy(gref_a, d_a2, nBytes*2, cudaMemcpyDeviceToHost);
 
 		} else {
-			printf("iter = %ld\n", iter);
 			compute_Device <<<grid, block, 0, 0>>> (d_r1, d_v1, d_a1, d_r2, d_v2, d_a2, d_m, nElem);
 			cudaDeviceSynchronize ();
 			// cudaMemcpy(gref_m, d_m, nBytes, cudaMemcpyDeviceToHost);
