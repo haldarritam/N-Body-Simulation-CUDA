@@ -250,3 +250,129 @@ int main (int argc, char *argv[])
 
 	return 0;
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+__device__ float3 bodyBodyInteraction (float3 ai, float4 bi, float4 bj)
+{
+	float3 dist;
+	
+	dist.x = bj.x - bi.x;
+	dist.y = bj.y - bi.y;
+	dist.z = bj.z - bi.z;
+	
+	float distSqr = dot(dist, dist) + SOFTENING;
+	float distSixth = distSqr * distSqr * distSqr;
+	float invDistCube = rsqrtf(distSixth);
+	
+	float s = G * bj.w * invDistCube
+	
+	ai.x += s * r.x;
+	ai.y += s * r.y;
+	ai.z += s * r.z;
+	return ai;
+}
+
+
+__device__ void calculateForces (void *devX, void *devA, unsigned nElem)
+{
+	unsigned int gtid = blockIdx.x * blockDim.x + threadIdx.x;
+	extern __shared__ float4[] shPosition;
+	
+	float4 *gblPosition = (float4 *) devX;
+	float4 *gblAcceleration = (float4 *) devA;
+	float4 myPosition;
+	float3 acc = {0.0f, 0.0f, 0.0f};
+	
+	myPosition = gblPosition[gtid];
+	for (unsigned tile=0; tile<nTiles; tile++) {
+		shPosition[threadIdx] = gblPosition[ tile*blockDim.x + threadIdx ];
+		__syncthreads();	// Wait for all threads in block to load data
+							// ... into shared memory
+		for (unsigned j=0, j<blockDim.x; j++)
+			acc = bodyBodyInteraction(myPosition, shPosition[j], acc);
+		
+		__syncthreads();	// wait for all threads in block to complete their
+							// ... computations to not overwrite sh. mem.
+	}
+	
+	// save result in gbl. mem. for integration step
+	float4 acc4 = {acc.x, acc.y, acc.z, 0.0f};
+	gblAcceleration[gtid] = acc4;
+}
+
+inline float3 scalevec (float3 &v0, float scalar)
+{
+	float3 rt = v0;
+	rt.x *= scalar;
+	rt.y *= scalar;
+	rt.z *= scalar;
+	return rt;
+}
+
+inline float normalize (float3 &v0)
+{
+	float dist = sqrtf(dot(v0, v0));
+	if (dist > 1e-6) {
+		v0.x /= dist;
+		v0.y /= dist;
+		v0.z /= dist;
+	} else {
+		v0.x *= 1e6;
+		v0.y *= 1e6;
+		v0.z *= 1e6;
+	}
+	
+	return dist;
+}
+
+inline float dot (float3 v0, float3 v1)
+{
+	return v0.x*v1.x + v0.y*v1.y + v0.z*v1.z;
+}
+
+inline float3 cross (float3 v0, float3 v1)
+{
+	float3 v2;
+	v2.x = v0.y*v1.z - v0.z*v1.y;
+	v2.y = v0.z*v1.x - v0.x*v1.z;
+	v2.z = v0.z*v1.y - v0.y*v1.x;
+	return v2;
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
