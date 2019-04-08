@@ -2,12 +2,12 @@
 #define __AUX_DECLARATIONS_GPU_CPU_H
 
 #define BLOCK_SIZE            1024
-#define MASS                  1
+#define MASS                  10000.0f
 #define DT                    0.001953125f
 #define EPS                   0.0009765625f
-#define G                     1
+#define G                     80
 
-#define SIZE_OF_BODIES        0.7f     // (0.5 - 3)
+#define SIZE_OF_BODIES        0.7f     // set between -> (0.5 - 3)
 #define X_RES                 1900.0f
 #define Y_RES                 1080.0f
 #define MAX_PIXEL             3

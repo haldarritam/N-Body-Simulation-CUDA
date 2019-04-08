@@ -16,6 +16,9 @@ int main (const int argc, const char** argv) {
     int nIters = 1000, limit_iter = 0;  // simulation iterations
     int iter = 0, i = 0, grid_size = 0, stop = 0;
     double total_time_gpu = 0;
+
+    float* x = NULL;
+    float* y = NULL;
     
     body_pos *h_body_pos, *d_body_pos;
     body_parameters *h_body_par, *d_body_par;
@@ -61,11 +64,18 @@ int main (const int argc, const char** argv) {
     size_t pos_bytes = nBodies*sizeof(body_pos);
     size_t par_bytes = nBodies*sizeof(body_parameters);
     cudaMallocHost((body_pos **) &h_body_pos, pos_bytes);
-    cudaMallocHost((body_parameters **) &h_body_par, par_bytes); 
+    cudaMallocHost((body_parameters **) &h_body_par, par_bytes);
+    x = new float[nBodies];
+    y = new float[nBodies];
+
     
     // Init mass / pos / vel / acc data
     initialize_bodies(h_body_pos, h_body_par, nBodies);             
-  
+    
+    for (i = 0; i < nBodies; i++) {
+      x[i] = h_body_pos[i].x;
+      y[i] = h_body_pos[i].y;
+    }
     // dynamically allocating bodies for the graphics
     std::vector <sf::CircleShape> body_graphics;
     for (i = 0; i < nBodies; i++)
@@ -125,8 +135,11 @@ int main (const int argc, const char** argv) {
         double timeStampB = getTimeStamp();
         gpuErrchk(cudaPeekAtLastError());
         
-        for (i = 0; i < nBodies; i++)
-            body_graphics[i].move(h_body_pos[i].x,h_body_pos[i].y);
+        for (i = 0; i < nBodies; i++){
+            body_graphics[i].move(x[i] - h_body_pos[i].x, y[i] - h_body_pos[i].y);
+            x[i] = h_body_pos[i].x;
+            y[i] = h_body_pos[i].y;
+        }
 
         window.clear();
 
@@ -137,14 +150,18 @@ int main (const int argc, const char** argv) {
         total_time_gpu = total_time_gpu + (timeStampB - timeStampA);
         iter++;
 
-        if ((limit_iter == 1) && (iter == nIters))
+        if ((limit_iter == 1) && (iter == nIters)) {
             stop = 1;
+            window.close();
+        }
     }
 
     printf("\n");
     printf("GPU -- Total Time Taken: %lf\n\n", total_time_gpu);
   
     // free memory
+    delete [] x;
+    delete [] y;
     cudaFreeHost(h_body_pos);
     cudaFreeHost(h_body_par);
     cudaFree(d_body_pos);
@@ -158,16 +175,16 @@ void initialize_bodies(body_pos *b_pos, body_parameters *b_par, int n) {
     int i = 0;
     srand(time(0));
     for (i = 0; i < n; i++) {
-      b_pos[i].x = ((rand() / (float)RAND_MAX) * (X_RES - 100.0f));
-      b_pos[i].y = ((rand() / (float)RAND_MAX) * (Y_RES - 100.0f));
-      b_pos[i].z = ((rand() / (float)RAND_MAX) * 500.0f);
-      b_par[i].m = MASS;
+      b_pos[i].x = ((rand() / (float)RAND_MAX) * X_RES);
+      b_pos[i].y = ((rand() / (float)RAND_MAX) * Y_RES);
+      // b_pos[i].z = ((rand() / (float)RAND_MAX) * 500.0f);
+      b_par[i].m = ((rand() / (float)RAND_MAX) * MASS);;
       b_par[i].ax = 0.0f; 
       b_par[i].ay = 0.0f;
-      b_par[i].az = 0.0f; 
+      // b_par[i].az = 0.0f; 
       b_par[i].vx = 0.0f;
       b_par[i].vy = 0.0f;
-      b_par[i].vz = 0.0f;
+      // b_par[i].vz = 0.0f;
     }
 }  
 
@@ -177,10 +194,10 @@ __global__ void nbody_acc_vel(body_pos* b_pos, body_parameters* b_par, float dt,
     int j = 0;
     float dx = 0.0f, 
           dy = 0.0f,
-          dz = 0.0f,
+          // dz = 0.0f,
           sx = 0.0f, 
           sy = 0.0f,
-          sz = 0.0f,  
+          // sz = 0.0f,  
           distSqr = 0.0f,
           distSqr3 = 0.0f, 
           invDist3 = 0.0f;
@@ -188,23 +205,24 @@ __global__ void nbody_acc_vel(body_pos* b_pos, body_parameters* b_par, float dt,
     for (j = 0; j < n; j++) {
       dx = b_pos[j].x - b_pos[idx].x;
       dy = b_pos[j].y - b_pos[idx].y;
-      dz = b_pos[j].z - b_pos[idx].z;
-      distSqr = dx*dx + dy*dy + dz*dz + EPS;
+      // dz = b_pos[j].z - b_pos[idx].z;
+      distSqr = dx*dx + dy*dy /* + dz*dz */ + EPS;
       distSqr3 = distSqr * distSqr * distSqr;      
       invDist3 = (G * b_par[j].m)/sqrt(distSqr3);
   
-      sx += dx * invDist3; sy += dy * invDist3; sz += dz * invDist3;
+      sx += dx * invDist3; sy += dy * invDist3; 
+      // sz += dz * invDist3;
     }
   
     // acceleration calculation
     b_par[idx].ax += sx;
     b_par[idx].ay += sy;
-    b_par[idx].az += sz;
+    // b_par[idx].az += sz;
   
     // velocity calculation
     b_par[idx].vx += b_par[idx].ax * dt;
     b_par[idx].vy += b_par[idx].ay * dt;
-    b_par[idx].vz += b_par[idx].az * dt;    
+    // b_par[idx].vz += b_par[idx].az * dt;    
 }
 
 __global__ void nbody_integration(body_pos* b_pos, body_parameters* b_par, float dt, int n) {
@@ -212,7 +230,7 @@ __global__ void nbody_integration(body_pos* b_pos, body_parameters* b_par, float
     int idx = threadIdx.x + blockIdx.x*blockDim.x ; 
 
     // integrate and find the new positions
-    b_pos[idx].x = b_par[idx].vx*dt;
-    b_pos[idx].y = b_par[idx].vy*dt;
-    b_pos[idx].z = b_par[idx].vz*dt;
+    b_pos[idx].x += b_par[idx].vx*dt;
+    b_pos[idx].y += b_par[idx].vy*dt;
+    // b_pos[idx].z += b_par[idx].vz*dt;
 }
