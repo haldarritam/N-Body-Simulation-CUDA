@@ -340,9 +340,9 @@ void *computeHost_SMT (void *arg)
 
 		if (count == NUM_CPU_THREADS*(2*iter+2)) {
 			// writing to file
-/*			for (unsigned int idx=0; idx<nElem; idx++) {*/
-/*				fprintf(destFile, "%f,%f,%f\n", *(*o_r+ND*idx+0), *(*o_r+ND*idx+1), *(*o_r+ND*idx+2));*/
-/*			}*/
+			for (unsigned int idx=0; idx<nElem; idx++) {
+				fprintf(destFile, "%f,%f,%f\n", *(*o_r+ND*idx+0), *(*o_r+ND*idx+1), *(*o_r+ND*idx+2));
+			}
 
 			pthread_cond_broadcast (&count_condition);
 			//printf("Broadcasting by tid=%ld\n", offset);

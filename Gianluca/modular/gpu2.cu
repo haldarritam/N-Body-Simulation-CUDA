@@ -286,9 +286,9 @@ __device__ float3 bodyBodyInteraction (float3 ai, float4 bi, float4 bj)
 }
 
 
-__device__ void calculateForces (void *devX, void *devA, unsigned nElem)
+__global__ void calculateForces (void *devX, void *devA, unsigned nElem)
 {
-	unsigned int gtid = blockIdx.x * blockDim.x + threadIdx.x;
+	unsigned gtid = blockIdx.x * blockDim.x + threadIdx.x;
 	extern __shared__ float4[] shPosition;
 	
 	float4 *gblPosition = (float4 *) devX;
@@ -301,8 +301,9 @@ __device__ void calculateForces (void *devX, void *devA, unsigned nElem)
 		shPosition[threadIdx] = gblPosition[ tile*blockDim.x + threadIdx ];
 		__syncthreads();	// Wait for all threads in block to load data
 							// ... into shared memory
+		#pragma unroll 4
 		for (unsigned j=0, j<blockDim.x; j++)
-			acc = bodyBodyInteraction(myPosition, shPosition[j], acc);
+			acc = bodyBodyInteraction(acc, myPosition, shPosition[j]);
 		
 		__syncthreads();	// wait for all threads in block to complete their
 							// ... computations to not overwrite sh. mem.
@@ -313,6 +314,8 @@ __device__ void calculateForces (void *devX, void *devA, unsigned nElem)
 	gblAcceleration[gtid] = acc4;
 }
 
+
+// HELPER FUNCTIONS
 inline float3 scalevec (float3 &v0, float scalar)
 {
 	float3 rt = v0;

@@ -6,8 +6,8 @@ import pandas as pd
 import os, sys
 
 NUM_BODIES = 4096
-NUM_ITER = 1000
-MAX_POS = 250
+NUM_ITER = 100
+MAX_POS = 12500
 
 t = np.array([np.ones(NUM_BODIES)*i for i in range(NUM_ITER)]).flatten()
 x = np.zeros(shape=NUM_BODIES*NUM_ITER, dtype=np.float32, order='C')
