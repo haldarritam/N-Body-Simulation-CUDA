@@ -14,9 +14,9 @@ int main (int argc, char *argv[])
 
 	// acquiring command line arguments, if any.
 	if (argc > 1)
-		nElem = strtoul(argv[1], &ptr1, 10);
+		nElem  = (unsigned int) strtoul(argv[1], &ptr1, 10);
 	if (argc > 2)
-		nIter = strtoul(argv[2], &ptr2, 10);
+		nIter  = (unsigned int) strtoul(argv[2], &ptr2, 10);
 	if (argc > 3)
 		config = (unsigned int) strtoul(argv[3], &ptr3, 10);
 

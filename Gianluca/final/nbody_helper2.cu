@@ -514,7 +514,7 @@ __device__ float3 calcAcceleration (float3 *devX, unsigned nTiles)
 	return acc3;
 }
 
-__global__ void calcIntegration (float3 *devX_ip1, const float *devX_i,
+__global__ void calcIntegration (float3 *devX_ip1, const float3 *devX_i,
 	float3 *devV_i, float3 *devA_i, const unsigned nElem, const unsigned nTiles)
 {
 	unsigned gtid = blockIdx.x * blockDim.x + threadIdx.x;
