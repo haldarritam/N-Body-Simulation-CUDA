@@ -1,7 +1,4 @@
-#include <nbody_helper2.h>
-
-
-
+#include "nbody_helper2.h"
 
 UNIVERSE US;
 
@@ -13,6 +10,56 @@ double getTimeStamp()
 	return (double) tv.tv_usec/1000000 + tv.tv_sec;
 }
 
+// HELPER FUNCTIONS
+inline float3 scalevec (float3 &v0, float scalar)
+{
+	float3 rt = v0;
+	rt.x *= scalar;
+	rt.y *= scalar;
+	return rt;
+}
+
+inline float dot (float2 v0, float2 v1)
+{
+	return v0.x*v1.x + v0.y*v1.y;
+}
+
+inline float normalize (float2 v0)
+{
+	float dist = sqrtf(dot(v0, v0));
+	if (dist > 1e-6) {
+		v0.x /= dist;
+		v0.y /= dist;
+	} else {
+		v0.x *= 1e6;
+		v0.y *= 1e6;
+	}
+	
+	return dist;
+}
+
+inline float3 cross (float3 v0, float3 v1)
+{
+	float3 v2;
+	v2.x = v0.y*v1.z - v0.z*v1.y;
+	v2.y = v0.z*v1.x - v0.x*v1.z;
+	v2.z = v0.z*v1.y - v0.y*v1.x;
+	return v2;
+}
+
+// inline void gpuAssert(cudaError_t code, const char *file, int line, bool abort=true)
+// {
+// 	if (code != cudaSuccess)
+// 	{
+// 		fprintf(stderr,"GPUassert: %s %s %d\n", cudaGetErrorString(code), file, line);
+// 		if (abort) exit(code);
+// 	}
+// }
+
+inline float rand_sign ()
+{
+	return (rand()-RAND_MAX) >= 0 ? 1.0 : -1.0;
+}
 
 // void print_BodyStats (const float3 *r, const float3 *v, const float3 *a, const unsigned long nElem)
 // {
@@ -75,44 +122,47 @@ void init_MassPositionVelocity (float3 *r, float3 *v, const unsigned long nElem,
 	// populating mass, position, & velocity arrays
 	unsigned long idx;
 	float mass_range = MAX_MASS - MIN_MASS;
+	float x_width = 300.0;
+	float y_width = 300.0;
 	float x_mid = X_RES/2;
-	float x_max = (X_RES + X_WIDTH)/2;
-	float x_min = (X_RES - X_WIDTH)/2;
+	//float x_max = (X_RES + x_width)/2;
+	float x_min = (X_RES - x_width)/2;
 	float y_mid = Y_RES/2;
-	float y_max = (Y_RES + Y_WIDTH)/2;
-	float y_min = (Y_RES - Y_WIDTH)/2;
+	//float y_max = (Y_RES + y_width)/2;
+	float y_min = (Y_RES - y_width)/2;
+
+	float x, y, radius, angle, system_mass, speed_factor, tangential_speed;
+	float shell_radius, shell_thickness, radial_velocity;
+	float2 CoM, dist, unit_dist;
 
 	switch (config) {
 		case RANDOM_SQUARE_NO_VEL:
 			for (idx=0; idx<nElem; idx++) {
-				r[idx].x = (float) (rand()/RAND_MAX) * X_WIDTH + x_min;
-				r[idx].y = (float) (rand()/RAND_MAX) * Y_WIDTH + y_min;
+				r[idx].x = (float) (rand()/RAND_MAX) * x_width + x_min;
+				r[idx].y = (float) (rand()/RAND_MAX) * y_width + y_min;
 				r[idx].z = (float) (rand()/RAND_MAX) * mass_range + MIN_MASS;
-				v[idx]   = {0.0f, 0.0f, 0.0f};
+				v[idx]   = (float3) {0.0f, 0.0f, 0.0f};
 			}
 			break;
 
 		case RANDOM_CIRCLE_NO_VEL:
-			float radius, x, y;
 			for (idx=0; idx<nElem; idx++) {
-				radius = (float) (rand()/RAND_MAX) * Y_WIDTH/2;
+				radius = (float) (rand()/RAND_MAX) * y_width/2;
 				x = (float) (rand()/RAND_MAX) * radius * rand_sign();
 				y = sqrt(radius*radius - x*x) * rand_sign();
 				r[idx].x = x_mid + x;
 				r[idx].y = y_mid + y;;
 				r[idx].z = (float) (rand()/RAND_MAX) * mass_range + MIN_MASS;
-				v[idx]   = {0.0f, 0.0f, 0.0f};
+				v[idx]   = (float3) {0.0f, 0.0f, 0.0f};
 			}
 			break;
 
 		case EXPAND_SHELL:
-			float radius, x, y, angle;
-			float shell_radius = Y_WIDTH/2;
-			float shell_thickness = 0.25*shell_radius;
-			float2 CoM = {0.0f, 0.0f};
-			float system_mass = 0.0;
-			float2 dist;
-			float speed_factor=0.1;
+			shell_radius = y_width/2;
+			shell_thickness = 0.25*shell_radius;
+			CoM = (float2) {0.0f, 0.0f};
+			system_mass = 0.0;
+			speed_factor=0.1;
 
 			for (idx=0; idx<nElem; idx++) {
 				// radius is the distance of point from center of window
@@ -144,19 +194,16 @@ void init_MassPositionVelocity (float3 *r, float3 *v, const unsigned long nElem,
 			break;
 
 		case SPIRAL_SINGLE_GALAXY:
-			float radius;
-			float2 CoM = {0.0f, 0.0f};
-			float system_mass = 0.0;
-			float2 dist, unit_dist;
-			float tangential_speed;
+			CoM = (float2) {0.0f, 0.0f};
+			system_mass = 0.0;
 			for (idx=0; idx<nElem; idx++) {
 				if (idx == 0) {
 					r[idx].x = x_mid;
 					r[idx].y = y_mid;
 					r[idx].z = ((float) (rand()/RAND_MAX) * mass_range + MIN_MASS)*10000;
 				} else {
-					r[idx].x = (float) (rand()/RAND_MAX) * X_WIDTH + x_min;
-					r[idx].y = (float) (rand()/RAND_MAX) * Y_WIDTH + y_min;
+					r[idx].x = (float) (rand()/RAND_MAX) * x_width + x_min;
+					r[idx].y = (float) (rand()/RAND_MAX) * y_width + y_min;
 					r[idx].z = (float) (rand()/RAND_MAX) * mass_range + MIN_MASS;
 				}
 				CoM.x += r[idx].z * r[idx].x;
@@ -183,19 +230,16 @@ void init_MassPositionVelocity (float3 *r, float3 *v, const unsigned long nElem,
 			break;
 
 		case SPIRAL_DOUBLE_GALAXY:
-			float radius;
-			float2 CoM = {0.0f, 0.0f};
-			float system_mass = 0.0;
-			float2 dist, unit_dist;
-			float tangential_speed;
+			CoM = (float2) {0.0f, 0.0f};
+			system_mass = 0.0;
 			for (idx=0; idx<nElem; idx++) {
 				if (idx == 0) {
 					r[idx].x = x_mid;
 					r[idx].y = y_mid;
 					r[idx].z = ((float) (rand()/RAND_MAX) * mass_range + MIN_MASS)*10000;
 				} else {
-					r[idx].x = (float) (rand()/RAND_MAX) * X_WIDTH + x_min;
-					r[idx].y = (float) (rand()/RAND_MAX) * Y_WIDTH + y_min;
+					r[idx].x = (float) (rand()/RAND_MAX) * x_width + x_min;
+					r[idx].y = (float) (rand()/RAND_MAX) * y_width + y_min;
 					r[idx].z = (float) (rand()/RAND_MAX) * mass_range + MIN_MASS;
 				}
 				CoM.x += r[idx].z * r[idx].x;
@@ -222,19 +266,16 @@ void init_MassPositionVelocity (float3 *r, float3 *v, const unsigned long nElem,
 			break;
 
 		case SPIRAL_QUAD_GALAXY:
-			float radius;
-			float2 CoM = {0.0f, 0.0f};
-			float system_mass = 0.0;
-			float2 dist, unit_dist;
-			float tangential_speed;
+			CoM = (float2) {0.0f, 0.0f};
+			system_mass = 0.0;
 			for (idx=0; idx<nElem; idx++) {
 				if (idx == 0) {
 					r[idx].x = x_mid;
 					r[idx].y = y_mid;
 					r[idx].z = ((float) (rand()/RAND_MAX) * mass_range + MIN_MASS)*10000;
 				} else {
-					r[idx].x = (float) (rand()/RAND_MAX) * X_WIDTH + x_min;
-					r[idx].y = (float) (rand()/RAND_MAX) * Y_WIDTH + y_min;
+					r[idx].x = (float) (rand()/RAND_MAX) * x_width + x_min;
+					r[idx].y = (float) (rand()/RAND_MAX) * y_width + y_min;
 					r[idx].z = (float) (rand()/RAND_MAX) * mass_range + MIN_MASS;
 				}
 				CoM.x += r[idx].z * r[idx].x;
@@ -261,47 +302,16 @@ void init_MassPositionVelocity (float3 *r, float3 *v, const unsigned long nElem,
 			break;
 
 		default:
-			float radius, x, y;
 			for (idx=0; idx<nElem; idx++) {
-				radius = (float) (rand()/RAND_MAX) * Y_WIDTH/2;
+				radius = (float) (rand()/RAND_MAX) * y_width/2;
 				x = (float) (rand()/RAND_MAX) * radius * rand_sign();
 				y = sqrt(radius*radius - x*x) * rand_sign();
 				r[idx].x = x_mid + x;
 				r[idx].y = y_mid + y;;
 				r[idx].z = (float) (rand()/RAND_MAX) * mass_range + MIN_MASS;
-				v[idx]   = {0.0f, 0.0f, 0.0f};
+				v[idx]   = (float3) {0.0f, 0.0f, 0.0f};
 			}
 			break;
-	}
-
-
-	for (idx=0; idx<nElem; idx++) 
-	{
-		// initializing mass and position
-		if (idx % 100 == 0) {
-			US.m[idx] = 128000*MAX_MASS;
-			for (dim=0; dim<ND; dim++) {
-				US.r1[ND*idx+dim] = (float) ((double) rand() / (double) (RAND_MAX/(1000*2)) - 1000);
-			}
-		} else {
-			US.m[idx] = (float) ((double) rand() / (double) (RAND_MAX/MAX_MASS));
-			for (dim=0; dim<ND; dim++) {
-				US.r1[ND*idx+dim] = (float) ((double) rand() / (double) (RAND_MAX/(MAX_POS*2)) - MAX_POS);
-			}
-		}
-
-		// calculating cross product along z-plane for rotational initial velocity about k-hat
-		if (idx % 100 == 0) {
-			US.v1[ND*idx + 0] = 0;
-			US.v1[ND*idx + 1] = 0;
-			US.v1[ND*idx + 2] = 0;
-		} else {
-			rx = US.r1[ND*idx + 0]; ry = US.r1[ND*idx + 1]; rz = US.r1[ND*idx + 2];
-			mag_cross_sq = sqrtf(rx*rx + ry*ry + rz*rz);
-			US.v1[ND*idx + 0] =    MAX_VEL * ry/mag_cross_sq;
-			US.v1[ND*idx + 1] = -1*MAX_VEL * rx/mag_cross_sq;
-			US.v1[ND*idx + 2] = 0.0;
-		}
 	}
 }
 
@@ -347,56 +357,7 @@ void init_MassPositionVelocity (float3 *r, float3 *v, const unsigned long nElem,
 // 	pthread_exit (NULL);
 // }
 
-// HELPER FUNCTIONS
-inline float3 scalevec (float3 v0, float scalar)
-{
-	float3 rt = v0;
-	rt.x *= scalar;
-	rt.y *= scalar;
-	return rt;
-}
 
-inline float normalize (float2 v0)
-{
-	float dist = sqrtf(dot(v0, v0));
-	if (dist > 1e-6) {
-		v0.x /= dist;
-		v0.y /= dist;
-	} else {
-		v0.x *= 1e6;
-		v0.y *= 1e6;
-	}
-	
-	return dist;
-}
-
-inline float dot (float2 v0, float2 v1)
-{
-	return v0.x*v1.x + v0.y*v1.y;
-}
-
-inline float3 cross (float3 v0, float3 v1)
-{
-	float3 v2;
-	v2.x = v0.y*v1.z - v0.z*v1.y;
-	v2.y = v0.z*v1.x - v0.x*v1.z;
-	v2.z = v0.z*v1.y - v0.y*v1.x;
-	return v2;
-}
-
-inline void gpuAssert(cudaError_t code, const char *file, int line, bool abort=true)
-{
-	if (code != cudaSuccess)
-	{
-		fprintf(stderr,"GPUassert: %s %s %d\n", cudaGetErrorString(code), file, line);
-		if (abort) exit(code);
-	}
-}
-
-inline float rand_sign ()
-{
-	return (rand()-RAND_MAX) >= 0 ? 1.0 : -1.0;
-}
 
 void print_simulationParameters (unsigned long nElem, unsigned long nIter, unsigned int cpu_threads)
 {
@@ -458,17 +419,17 @@ __device__ float2 bodyBodyInteraction (float2 ai, float3 bi, float3 bj)
 	float distSqr = dot(dist, dist) + SOFTENING;
 	float invDistCube = rsqrtf(distSqr * distSqr * distSqr);
 	
-	float s = bj.w * invDistCube
+	float s = bj.z * invDistCube;
 	
-	ai.x += s * r.x;
-	ai.y += s * r.y;
+	ai.x += s * dist.x;
+	ai.y += s * dist.y;
 	return ai;
 }
 
 __global__ void initAcceleration (float3 *devA, float3 *devX, const unsigned nTiles)
 {
 	unsigned gtid = blockIdx.x * blockDim.x + threadIdx.x;
-	extern __shared__ float3[] shPosition3;
+	extern __shared__ float3[] shPosition3[blockDim.x];
 	
 	float3 myPosition3;
 	float2 acc2 = {0.0f, 0.0f};
@@ -479,7 +440,7 @@ __global__ void initAcceleration (float3 *devA, float3 *devX, const unsigned nTi
 		__syncthreads();	// Wait for all threads in block to load data
 							// ... into shared memory
 		#pragma unroll 4
-		for (unsigned j=0, j<blockDim.x; j++)
+		for (unsigned j=0; j<blockDim.x; j++)
 			acc2 = bodyBodyInteraction(acc2, myPosition3, shPosition3[j]);
 		
 		__syncthreads();	// wait for all threads in block to complete their
@@ -492,9 +453,9 @@ __global__ void initAcceleration (float3 *devA, float3 *devX, const unsigned nTi
 __device__ float3 calcAcceleration (float3 *devX, unsigned nTiles)
 {
 	unsigned gtid = blockIdx.x * blockDim.x + threadIdx.x;
-	extern __shared__ float3[] shPosition3;
+	extern __shared__ float3 shPosition3[blockDim.x];
 	
-	float3 myPosition4;
+	float3 myPosition3;
 	float2 acc2 = {0.0f, 0.0f};
 	
 	myPosition3 = devX[gtid];
@@ -503,7 +464,7 @@ __device__ float3 calcAcceleration (float3 *devX, unsigned nTiles)
 		__syncthreads();	// Wait for all threads in block to load data
 							// ... into shared memory
 		#pragma unroll 4
-		for (unsigned j=0, j<blockDim.x; j++)
+		for (unsigned j=0; j<blockDim.x; j++)
 			acc2 = bodyBodyInteraction(acc2, myPosition3, shPosition3[j]);
 		
 		__syncthreads();	// wait for all threads in block to complete their

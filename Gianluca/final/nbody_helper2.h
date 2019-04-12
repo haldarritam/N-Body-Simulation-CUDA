@@ -46,10 +46,10 @@ enum INIT_CONFIG {
 
 inline float4 scalevec (float3 v0, float scalar);
 inline float normalize (float3 &v0);
-inline float dot (float3 v0, float3 v1);
+inline float dot (float2 v0, float2 v1);
 inline float3 cross (float3 v0, float3 v1);
 inline float rand_sign ();
-inline void gpuAssert(cudaError_t code, const char *file, int line, bool abort=true)
+inline void gpuAssert(cudaError_t code, const char *file, int line, bool abort=true);
 double getTimeStamp ();
 // void print_BodyStats (const float3 *r, const float3 *v, const float3 *a, const unsigned long nElem)
 void init_MassPositionVelocity (float4 *r, float4 *v, const unsigned long nElem, const unsigned int config);
