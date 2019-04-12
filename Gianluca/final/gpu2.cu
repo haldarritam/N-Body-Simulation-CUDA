@@ -42,7 +42,7 @@ int main (int argc, char *argv[])
 	float4 *h_dref_r, *h_dref_v;
 	float4 *d_r[2],   *d_v,      *d_a;
 	
-	size_t nBytes = nElem * sizeof(float4);
+	size_t nBytes = nElem * sizeof(float3);
 
 	// allocating page-locked memory for higher communication bandwidth during real-time vis.
 	checkCudaErrors (cudaMallocHost ((void**) &h_dref_r, nBytes));
@@ -63,9 +63,8 @@ int main (int argc, char *argv[])
 
 
 	// copying initialized data from host to device
-	checkCudaErrors (cudaMemcpy (d_r1, h_r1, nBytes*ND, cudaMemcpyHostToDevice));
-	checkCudaErrors (cudaMemcpy (d_v1, h_v1, nBytes*ND, cudaMemcpyHostToDevice));
-	checkCudaErrors (cudaMemcpy (d_a1, h_a1, nBytes*ND, cudaMemcpyHostToDevice));
+	checkCudaErrors (cudaMemcpy (d_r[0], h_dref_r, nBytes, cudaMemcpyHostToDevice));
+	checkCudaErrors (cudaMemcpy (d_v,    h_dref_v, nBytes, cudaMemcpyHostToDevice));
 
 	// compute initial acceleration of bodies on device
 	dim3 block_size (1024);
@@ -73,6 +72,7 @@ int main (int argc, char *argv[])
 	unsigned int nTiles = (nElem + block_size.x-1)/block_size.x;
 	printf("Computing initial acceleration on device.\n");
 	initAcceleration <<<grid_size, block_size, 0, 0>>> (d_a, d_r[0], nTiles);
+	cudaDeviceSynchronize ();
 
 	/////////////////////////////////////////////////////////////////////////////////////////////////
 	/// PERFORMING SIMULATION ON DEVICE

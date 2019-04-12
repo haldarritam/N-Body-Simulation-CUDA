@@ -14,59 +14,56 @@ double getTimeStamp()
 }
 
 
-void print_BodyStats (const float *m, const float *r, const float *v, const float *a)
-{
-    unsigned long nElem = US.nElem;
+// void print_BodyStats (const float3 *r, const float3 *v, const float3 *a, const unsigned long nElem)
+// {
+//     printf("\n");
+//     unsigned long idx;
+//     // print body number
+//     for (idx=0; idx<nElem; idx++) {
+//         if (idx == nElem-1)
+//             printf("Mass %ld\n", idx);
+//         else
+//             printf("Mass %ld\t", idx);
+//     }
 
-    printf("\n");
-    // print body number
-    for (unsigned long idx=0; idx<nElem; idx++) {
-        if (idx == nElem-1)
-            printf("Mass %ld\n", idx);
-        else
-            printf("Mass %ld\t", idx);
-    }
+//     // print Mass
+//     for (idx=0; idx<nElem; idx++) {
+//         if (idx == nElem-1)
+//             printf("%.2f\n", r[idx].z);
+//         else
+//             printf("%.2f\t", m[idx]);
+//     }
 
-    // print Mass
-    for (unsigned long idx=0; idx<nElem; idx++) {
-        if (idx == nElem-1)
-            printf("%.2f\n", m[idx]);
-        else
-            printf("%.2f\t", m[idx]);
-    }
-
-	// print position
-	for (unsigned int dim=0; dim<ND; dim++) {
-		for (unsigned long idx=0; idx<nElem; idx++) {
-			if (idx == nElem-1)
-				printf("%.2f\n", r[ND*idx + dim]);
-			else
-				printf("%.2f\t", r[ND*idx + dim]);
-		}
-	}	
+// 	// print position
+// 	for (dim=0; dim<ND; dim++) {
+// 		for (unsigned long idx=0; idx<nElem; idx++) {
+// 			if (idx == nElem-1)
+// 				printf("%.2f\n", *(r+idx*(ND+1)+dim));
+// 			else
+// 				printf("%.2f\t", *(r+idx*(ND+1)+dim));
+// 		}
+// 	}	
 	
-	// print velocity
-	for (unsigned int dim=0; dim<ND; dim++) {
-		for (unsigned long idx=0; idx<nElem; idx++) {
-			if (idx == nElem-1)
-				printf("%.2f\n", v[ND*idx + dim]);
-			else
-				printf("%.2f\t", v[ND*idx + dim]);
-		}
-	}	
+// 	// print velocity
+// 	for (dim=0; dim<ND; dim++) {
+// 		for (unsigned long idx=0; idx<nElem; idx++) {
+// 			if (idx == nElem-1)
+// 				printf("%.2f\n", v[ND*idx + dim]);
+// 			else
+// 				printf("%.2f\t", v[ND*idx + dim]);
+// 		}
+// 	}	
 
-	// print acceleration
-	for (unsigned int dim=0; dim<ND; dim++) {
-		for (unsigned long idx=0; idx<nElem; idx++) {
-			if (idx == nElem-1)
-				printf("%.2f\n", a[ND*idx + dim]);
-			else
-				printf("%.2f\t", a[ND*idx + dim]);
-		}
-	}	
-}
-
-
+// 	// print acceleration
+// 	for (dim=0; dim<ND; dim++) {
+// 		for (unsigned long idx=0; idx<nElem; idx++) {
+// 			if (idx == nElem-1)
+// 				printf("%.2f\n", a[ND*idx + dim]);
+// 			else
+// 				printf("%.2f\t", a[ND*idx + dim]);
+// 		}
+// 	}	
+// }
 
 void init_MassPositionVelocity (float3 *r, float3 *v, const unsigned long nElem, const unsigned int config)
 {
@@ -308,77 +305,74 @@ void init_MassPositionVelocity (float3 *r, float3 *v, const unsigned long nElem,
 	}
 }
 
-void *init_Acceleration_SMT (void *arg)
-{
-	// define local variables for convenience
-	unsigned long start, end, len, offset, nElem;
+// void *init_Acceleration_SMT (void *arg)
+// {
+// 	// define local variables for convenience
+// 	unsigned long start, end, len, offset, nElem;
 
-	nElem = US.nElem;
-	offset = (unsigned long) arg;
-	len = (unsigned long) US.nElem / NUM_CPU_THREADS;
-	start = offset * len;
-	end = start + len;
+// 	nElem = US.nElem;
+// 	offset = (unsigned long) arg;
+// 	len = (unsigned long) US.nElem / NUM_CPU_THREADS;
+// 	start = offset * len;
+// 	end = start + len;
 
-	unsigned long i, j;
-	float ax_ip1, ay_ip1, az_ip1;
-	float dx_ip1, dy_ip1, dz_ip1, rDistSquared, MinvDistCubed;
-	float **i_r = &(US.r1);
-	float **o_a = &(US.a1);
+// 	unsigned long i, j;
+// 	float ax_ip1, ay_ip1, az_ip1;
+// 	float dx_ip1, dy_ip1, dz_ip1, rDistSquared, MinvDistCubed;
+// 	float **i_r = &(US.r1);
+// 	float **o_a = &(US.a1);
 
-	// calculating NEXT acceleration of each body from the position of every other bodies
-	// ... and NEXT velocity of each body utilizing the next acceleration
-	for (i=start; i<end; i++) {
-		ax_ip1 = 0.0;
-		ay_ip1 = 0.0;
-		az_ip1 = 0.0;
-		for (j=0; j<nElem; j++) {
-			dx_ip1 = *(*i_r + (ND*j+0)) - *(*i_r + (ND*i+0));
-			dy_ip1 = *(*i_r + (ND*j+1)) - *(*i_r + (ND*i+1));
-			dz_ip1 = *(*i_r + (ND*j+2)) - *(*i_r + (ND*i+2));
-			rDistSquared = dx_ip1*dx_ip1 + dy_ip1*dy_ip1 + dz_ip1*dz_ip1 + SOFTENING;
-			MinvDistCubed = US.m[j]/sqrtf(rDistSquared*rDistSquared*rDistSquared);
-			ax_ip1 += dx_ip1 * MinvDistCubed;
-			ay_ip1 += dy_ip1 * MinvDistCubed;
-			az_ip1 += dz_ip1 * MinvDistCubed;
-		}
+// 	// calculating NEXT acceleration of each body from the position of every other bodies
+// 	// ... and NEXT velocity of each body utilizing the next acceleration
+// 	for (i=start; i<end; i++) {
+// 		ax_ip1 = 0.0;
+// 		ay_ip1 = 0.0;
+// 		az_ip1 = 0.0;
+// 		for (j=0; j<nElem; j++) {
+// 			dx_ip1 = *(*i_r + (ND*j+0)) - *(*i_r + (ND*i+0));
+// 			dy_ip1 = *(*i_r + (ND*j+1)) - *(*i_r + (ND*i+1));
+// 			dz_ip1 = *(*i_r + (ND*j+2)) - *(*i_r + (ND*i+2));
+// 			rDistSquared = dx_ip1*dx_ip1 + dy_ip1*dy_ip1 + dz_ip1*dz_ip1 + SOFTENING;
+// 			MinvDistCubed = US.m[j]/sqrtf(rDistSquared*rDistSquared*rDistSquared);
+// 			ax_ip1 += dx_ip1 * MinvDistCubed;
+// 			ay_ip1 += dy_ip1 * MinvDistCubed;
+// 			az_ip1 += dz_ip1 * MinvDistCubed;
+// 		}
 
-		*(*o_a + (ND*i+0)) = G*ax_ip1;
-		*(*o_a + (ND*i+1)) = G*ay_ip1;
-		*(*o_a + (ND*i+2)) = G*az_ip1;
-	}
+// 		*(*o_a + (ND*i+0)) = G*ax_ip1;
+// 		*(*o_a + (ND*i+1)) = G*ay_ip1;
+// 		*(*o_a + (ND*i+2)) = G*az_ip1;
+// 	}
 
-	pthread_exit (NULL);
-}
+// 	pthread_exit (NULL);
+// }
 
 // HELPER FUNCTIONS
-inline float4 scalevec (float3 v0, float scalar)
+inline float3 scalevec (float3 v0, float scalar)
 {
-	float4 rt = v0;
+	float3 rt = v0;
 	rt.x *= scalar;
 	rt.y *= scalar;
-	rt.z *= scalar;
 	return rt;
 }
 
-inline float normalize (float3 &v0)
+inline float normalize (float2 v0)
 {
 	float dist = sqrtf(dot(v0, v0));
 	if (dist > 1e-6) {
 		v0.x /= dist;
 		v0.y /= dist;
-		v0.z /= dist;
 	} else {
 		v0.x *= 1e6;
 		v0.y *= 1e6;
-		v0.z *= 1e6;
 	}
 	
 	return dist;
 }
 
-inline float dot (float3 v0, float3 v1)
+inline float dot (float2 v0, float2 v1)
 {
-	return v0.x*v1.x + v0.y*v1.y + v0.z*v1.z;
+	return v0.x*v1.x + v0.y*v1.y;
 }
 
 inline float3 cross (float3 v0, float3 v1)
@@ -454,13 +448,12 @@ void print_deviceProperties (int dev, int driverVersion, int runtimeVersion, cud
 		2.0*deviceProp.memoryClockRate*(deviceProp.memoryBusWidth/8)/1e6);
 }
 
-__device__ float3 bodyBodyInteraction (float3 ai, float4 bi, float4 bj)
+__device__ float2 bodyBodyInteraction (float2 ai, float3 bi, float3 bj)
 {
-	float3 dist;
+	float2 dist;
 	
 	dist.x = bj.x - bi.x;
 	dist.y = bj.y - bi.y;
-	dist.z = bj.z - bi.z;
 	
 	float distSqr = dot(dist, dist) + SOFTENING;
 	float invDistCube = rsqrtf(distSqr * distSqr * distSqr);
@@ -469,71 +462,72 @@ __device__ float3 bodyBodyInteraction (float3 ai, float4 bi, float4 bj)
 	
 	ai.x += s * r.x;
 	ai.y += s * r.y;
-	ai.z += s * r.z;
 	return ai;
 }
 
-__global__ void initAcceleration (float4 *devA, float4 *devX, const unsigned nTiles)
+__global__ void initAcceleration (float3 *devA, float3 *devX, const unsigned nTiles)
 {
 	unsigned gtid = blockIdx.x * blockDim.x + threadIdx.x;
-	extern __shared__ float4[] shPosition4;
+	extern __shared__ float3[] shPosition3;
 	
-	float4 myPosition4;
-	float3 acc3 = {0.0f, 0.0f, 0.0f};
+	float3 myPosition3;
+	float2 acc2 = {0.0f, 0.0f};
 	
-	myPosition4 = devX[gtid];
+	myPosition3 = devX[gtid];
 	for (unsigned tile=0; tile<nTiles; tile++) {
-		shPosition4[threadIdx] = devX[ tile*blockDim.x + threadIdx ];
+		shPosition3[threadIdx] = devX[ tile*blockDim.x + threadIdx ];
 		__syncthreads();	// Wait for all threads in block to load data
 							// ... into shared memory
 		#pragma unroll 4
 		for (unsigned j=0, j<blockDim.x; j++)
-			acc3 = bodyBodyInteraction(acc3, myPosition4, shPosition4[j]);
+			acc2 = bodyBodyInteraction(acc2, myPosition3, shPosition3[j]);
 		
 		__syncthreads();	// wait for all threads in block to complete their
 							// ... computations to not overwrite sh. mem.
 	}
 	
-	devA[gtid] = (float4) {G*acc3.x, G*acc3.y, G*acc3.z, 0.0f};
+	devA[gtid] = (float3) {G*acc2.x, G*acc2.y, 0.0f};
 }
 
-__device__ float4 calcAcceleration (float4 *devX, unsigned nTiles)
+__device__ float3 calcAcceleration (float3 *devX, unsigned nTiles)
 {
 	unsigned gtid = blockIdx.x * blockDim.x + threadIdx.x;
-	extern __shared__ float4[] shPosition4;
+	extern __shared__ float3[] shPosition3;
 	
-	float4 myPosition4;
-	float3 acc3 = {0.0f, 0.0f, 0.0f};
+	float3 myPosition4;
+	float2 acc2 = {0.0f, 0.0f};
 	
-	myPosition4 = devX[gtid];
+	myPosition3 = devX[gtid];
 	for (unsigned tile=0; tile<nTiles; tile++) {
-		shPosition4[threadIdx] = devX[ tile*blockDim.x + threadIdx ];
+		shPosition3[threadIdx] = devX[ tile*blockDim.x + threadIdx ];
 		__syncthreads();	// Wait for all threads in block to load data
 							// ... into shared memory
 		#pragma unroll 4
 		for (unsigned j=0, j<blockDim.x; j++)
-			acc3 = bodyBodyInteraction(acc3, myPosition4, shPosition4[j]);
+			acc2 = bodyBodyInteraction(acc2, myPosition3, shPosition3[j]);
 		
 		__syncthreads();	// wait for all threads in block to complete their
 							// ... computations to not overwrite sh. mem.
 	}
 	
-	float4 acc4 = {G*acc3.x, G*acc3.y, G*acc3.z, 0.0f};
-	return acc4;
+	float3 acc3 = {G*acc2.x, G*acc2.y, 0.0f};
+	return acc3;
 }
 
-__global__ void calcIntegration (float4 *devX_ip1, const float *devX_i,
-	float4 *devV_i, float4 *devA_i, const unsigned nElem, const unsigned nTiles)
+__global__ void calcIntegration (float3 *devX_ip1, const float *devX_i,
+	float3 *devV_i, float3 *devA_i, const unsigned nElem, const unsigned nTiles)
 {
 	unsigned gtid = blockIdx.x * blockDim.x + threadIdx.x;
 	if (gtid < nElem) {
-		float4 old_acc = devA_i[gtid];
-		float4 old_vel = devV_i[gtid];
-		float4 old_pos = devX_i[gtid];
+		float3 old_acc = devA_i[gtid];
+		float3 old_vel = devV_i[gtid];
+		float3 old_pos = devX_i[gtid];
 		
-		devX_ip1[gtid] = old_pos + scalevec(old_vel, DT) + scalevec(old_acc, DTSQd2);
-		float4 new_acc = calcAcceleration (devX_i, nTiles);
-		devV_i  [gtid] = old_vel + scalevec(old_acc + new_acc, DTd2);
-		devA_i  [gtid] = new_acc;
+		devX_ip1[gtid].x = old_pos.x + old_vel.x*DT + old_acc.x*DTSQd2;
+		devX_ip1[gtid].y = old_pos.y + old_vel.y*DT + old_acc.y*DTSQd2;
+		float3 new_acc   = calcAcceleration (devX_i, nTiles);
+		devV_i  [gtid].x = old_vel.x + (old_acc.x + new_acc.x)*DTd2;
+		devV_i  [gtid].y = old_vel.y + (old_acc.y + new_acc.y)*DTd2;
+		devA_i  [gtid]   = new_acc;
 	}
 }

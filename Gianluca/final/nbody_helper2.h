@@ -12,7 +12,7 @@
 
 // global constants
 #define NUM_CPU_THREADS 32
-#define ND 3				// number of spatial dimensions
+#define ND 2				// number of spatial dimensions
 #define MIN_MASS 0.1f
 #define MAX_MASS 1.0f
 #define MAX_POS 1000.0f
@@ -27,12 +27,12 @@
 #define SOFTENING 1.0f
 #define checkCudaErrors(ans) { gpuAssert((ans), __FILE__, __LINE__); }
 
-typedef struct {
-	float4 *r[2];
-	float4 *v;
-	float4 *a;
-	unsigned long nElem, nIter;
-} UNIVERSE;
+// typedef struct {
+// 	float4 *r[2];
+// 	float4 *v;
+// 	float4 *a;
+// 	unsigned long nElem, nIter;
+// } UNIVERSE;
 
 enum INIT_CONFIG {
 	RANDOM_SQUARE_NO_VEL,
@@ -51,9 +51,9 @@ inline float3 cross (float3 v0, float3 v1);
 inline float rand_sign ();
 inline void gpuAssert(cudaError_t code, const char *file, int line, bool abort=true)
 double getTimeStamp ();
-void print_BodyStats (const float *m, const float *r, const float *v, const float *a);
+// void print_BodyStats (const float3 *r, const float3 *v, const float3 *a, const unsigned long nElem)
 void init_MassPositionVelocity (float4 *r, float4 *v, const unsigned long nElem, const unsigned int config);
-void *init_Acceleration_SMT (void *arg);
+// void *init_Acceleration_SMT (void *arg);
 void print_simulationParameters (unsigned long nElem, unsigned long nIter, unsigned int cpu_threads);
 void print_deviceProperties (int dev, int driverVersion, int runtimeVersion, cudaDeviceProp deviceProp);
 __device__ float3 bodyBodyInteraction (float3 ai, float4 bi, float4 bj);
