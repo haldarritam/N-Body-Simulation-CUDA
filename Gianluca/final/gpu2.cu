@@ -70,6 +70,7 @@ int main (int argc, char *argv[])
 
 	// copying initialized data from host to device
 	checkCudaErrors (cudaMemcpy (d_r[0], h_dref_r, nBytes, cudaMemcpyHostToDevice));
+	checkCudaErrors (cudaMemcpy (d_r[1], h_dref_r, nBytes, cudaMemcpyHostToDevice));
 	checkCudaErrors (cudaMemcpy (d_v,    h_dref_v, nBytes, cudaMemcpyHostToDevice));
 
 	// compute initial acceleration of bodies on device
@@ -86,7 +87,7 @@ int main (int argc, char *argv[])
 	/// PERFORMING SIMULATION ON DEVICE
 	/////////////////////////////////////////////////////////////////////////////////////////////////
 
-	printf("Computing positions on device. Time taken: ");
+	printf("Computing positions on device.\n");
 	double timestamp_GPU_start = getTimeStamp();
 	for (unsigned iter=0; iter<nIter; iter++) {
 		calcIntegration <<<grid_size, block_size, 0, 0>>> (
@@ -106,7 +107,7 @@ int main (int argc, char *argv[])
 
 	double timestamp_GPU_end = getTimeStamp();
 	double elapsedTime = timestamp_GPU_end - timestamp_GPU_start;
-	printf("%.6lfs\n", elapsedTime);
+	printf("Elapsed Time (total): %.6lfs\n", elapsedTime);
 	printf("Elapsed Time per Iteration: %.6lfs\n", elapsedTime/nIter);
 
 	/////////////////////////////////////////////////////////////////////////////////////////////////

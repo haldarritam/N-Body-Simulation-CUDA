@@ -139,11 +139,14 @@ void init_MassPositionVelocity (float3 *r, float3 *v, const unsigned long nElem,
 
 	switch (config) {
 		case RANDOM_SQUARE_NO_VEL:
+			printf("Initializing positions and mass\n");
 			for (idx=0; idx<nElem; idx++) {
-				r[idx].x = (float) (rand()/RAND_MAX) * x_width + x_min;
-				r[idx].y = (float) (rand()/RAND_MAX) * y_width + y_min;
-				r[idx].z = (float) (rand()/RAND_MAX) * mass_range + MIN_MASS;
+				r[idx].x = (float) ((double) rand()/RAND_MAX) * x_width + x_min;
+				r[idx].y = (float) ((double) rand()/RAND_MAX) * y_width + y_min;
+				r[idx].z = (float) ((double) rand()/RAND_MAX) * mass_range + MIN_MASS;
 				v[idx]   = (float3) {0.0f, 0.0f, 0.0f};
+				// printf("Body %ld\t x: %.6f\ty: %.6f\t m: %.6f\n",
+				// 	idx, r[idx].x, r[idx].y, r[idx].z);
 			}
 			break;
 
@@ -480,8 +483,10 @@ __device__ float3 calcAcceleration (const float3 *devX, const unsigned nTiles)
 __global__ void calcIntegration (float3 *devX_ip1, const float3 *devX_i,
 	float3 *devV_i, float3 *devA_i, const unsigned nElem, const unsigned nTiles)
 {
-	unsigned gtid = blockIdx.x * blockDim.x + threadIdx.x;
+	unsigned int gtid = blockIdx.x * blockDim.x + threadIdx.x;
 	if (gtid < nElem) {
+		// if (gtid == 1) 
+		// 	printf("x: %.6f\ty: %.6f\tm: %.6f\n", devX_i[gtid].x, devX_i[gtid].y, devX_i[gtid].z);
 		float3 old_acc = devA_i[gtid];
 		float3 old_vel = devV_i[gtid];
 		float3 old_pos = devX_i[gtid];

@@ -191,8 +191,8 @@ __global__ void compute_Device (
 	const float *m, const unsigned long nElem)
 {
 	unsigned long tid = blockIdx.x * blockDim.x + threadIdx.x;
-	if (tid == 0)
-		printf("x: %.6f\ty:%.6f\n", i_r[0], i_r[1]);
+	// if (tid == 0)
+	// 	printf("x: %.6f\ty:%.6f\n", i_r[0], i_r[1]);
 
 	float ax_ip1 = 0.0, ay_ip1 = 0.0;
 	float dx_ip1, dy_ip1, rDistSquared, invDistCubed;
