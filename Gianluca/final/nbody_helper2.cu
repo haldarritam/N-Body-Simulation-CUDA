@@ -1,6 +1,15 @@
 #include "nbody_helper2.h"
 
-UNIVERSE US;
+// UNIVERSE US;
+
+// inline void gpuAssert(cudaError_t code, const char *file, int line, bool abort=true)
+// {
+// 	if (code != cudaSuccess)
+// 	{
+// 		fprintf(stderr,"GPUassert: %s %s %d\n", cudaGetErrorString(code), file, line);
+// 		if (abort) exit(code);
+// 	}
+// }
 
 // time stamp function in seconds 
 double getTimeStamp()
@@ -47,14 +56,7 @@ inline float3 cross (float3 v0, float3 v1)
 	return v2;
 }
 
-// inline void gpuAssert(cudaError_t code, const char *file, int line, bool abort=true)
-// {
-// 	if (code != cudaSuccess)
-// 	{
-// 		fprintf(stderr,"GPUassert: %s %s %d\n", cudaGetErrorString(code), file, line);
-// 		if (abort) exit(code);
-// 	}
-// }
+
 
 inline float rand_sign ()
 {
@@ -409,14 +411,14 @@ void print_deviceProperties (int dev, int driverVersion, int runtimeVersion, cud
 		2.0*deviceProp.memoryClockRate*(deviceProp.memoryBusWidth/8)/1e6);
 }
 
-__device__ float2 bodyBodyInteraction (float2 ai, float3 bi, float3 bj)
+__device__ float2 bodyBodyInteraction (float2 ai, const float3 bi, const float3 bj)
 {
 	float2 dist;
 	
 	dist.x = bj.x - bi.x;
 	dist.y = bj.y - bi.y;
 	
-	float distSqr = dot(dist, dist) + SOFTENING;
+	float distSqr = dist.x*dist.x + dist.y*dist.y + SOFTENING;
 	float invDistCube = rsqrtf(distSqr * distSqr * distSqr);
 	
 	float s = bj.z * invDistCube;
@@ -426,23 +428,23 @@ __device__ float2 bodyBodyInteraction (float2 ai, float3 bi, float3 bj)
 	return ai;
 }
 
-__global__ void initAcceleration (float3 *devA, float3 *devX, const unsigned nTiles)
+__global__ void initAcceleration (float3 *devA, const float3 *devX, const unsigned nTiles)
 {
-	unsigned gtid = blockIdx.x * blockDim.x + threadIdx.x;
-	extern __shared__ float3[] shPosition3[blockDim.x];
+	unsigned int gtid = blockIdx.x * blockDim.x + threadIdx.x;
+	__shared__ float3 shPosition3[1024];
 	
 	float3 myPosition3;
 	float2 acc2 = {0.0f, 0.0f};
 	
 	myPosition3 = devX[gtid];
-	for (unsigned tile=0; tile<nTiles; tile++) {
-		shPosition3[threadIdx] = devX[ tile*blockDim.x + threadIdx ];
+	for (unsigned int tile=0; tile<nTiles; tile++) {
+		shPosition3[threadIdx.x] = devX[ tile*blockDim.x + threadIdx.x ];
 		__syncthreads();	// Wait for all threads in block to load data
 							// ... into shared memory
-		#pragma unroll 4
-		for (unsigned j=0; j<blockDim.x; j++)
+		//#pragma unroll 4
+		for (unsigned int j=0; j<blockDim.x; j++)
 			acc2 = bodyBodyInteraction(acc2, myPosition3, shPosition3[j]);
-		
+
 		__syncthreads();	// wait for all threads in block to complete their
 							// ... computations to not overwrite sh. mem.
 	}
@@ -450,20 +452,20 @@ __global__ void initAcceleration (float3 *devA, float3 *devX, const unsigned nTi
 	devA[gtid] = (float3) {G*acc2.x, G*acc2.y, 0.0f};
 }
 
-__device__ float3 calcAcceleration (float3 *devX, unsigned nTiles)
+__device__ float3 calcAcceleration (const float3 *devX, const unsigned nTiles)
 {
-	unsigned gtid = blockIdx.x * blockDim.x + threadIdx.x;
-	extern __shared__ float3 shPosition3[blockDim.x];
+	unsigned int gtid = blockIdx.x * blockDim.x + threadIdx.x;
+	__shared__ float3 shPosition3[1024];
 	
 	float3 myPosition3;
 	float2 acc2 = {0.0f, 0.0f};
 	
 	myPosition3 = devX[gtid];
 	for (unsigned tile=0; tile<nTiles; tile++) {
-		shPosition3[threadIdx] = devX[ tile*blockDim.x + threadIdx ];
+		shPosition3[threadIdx.x] = devX[ tile*blockDim.x + threadIdx.x ];
 		__syncthreads();	// Wait for all threads in block to load data
 							// ... into shared memory
-		#pragma unroll 4
+		//#pragma unroll 4
 		for (unsigned j=0; j<blockDim.x; j++)
 			acc2 = bodyBodyInteraction(acc2, myPosition3, shPosition3[j]);
 		

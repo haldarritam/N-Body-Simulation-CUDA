@@ -8,6 +8,7 @@
 #include <string.h>
 #include <math.h>
 #include <pthread.h>
+#include <cuda.h>
 #include <cuda_runtime.h>
 
 // global constants
@@ -25,7 +26,17 @@
 #define DTSQd2 0.00000190734f	// (time step squared) divided by 2
 #define DAMPENING 1.0f
 #define SOFTENING 1.0f
+// #define checkCudaErrors(ans) { gpuAssert((ans), __FILE__, __LINE__); }
+
 #define checkCudaErrors(ans) { gpuAssert((ans), __FILE__, __LINE__); }
+inline void gpuAssert(cudaError_t code, const char *file, int line, bool abort=true)
+{
+   if (code != cudaSuccess) 
+   {
+      fprintf(stderr,"GPUassert: %s %s %d\n", cudaGetErrorString(code), file, line);
+      if (abort) exit(code);
+   }
+}
 
 // typedef struct {
 // 	float4 *r[2];
@@ -49,17 +60,17 @@ inline float normalize (float3 &v0);
 inline float dot (float2 v0, float2 v1);
 inline float3 cross (float3 v0, float3 v1);
 inline float rand_sign ();
-inline void gpuAssert(cudaError_t code, const char *file, int line, bool abort=true);
+// inline void gpuAssert(cudaError_t code, const char *file, int line, bool abort);
 double getTimeStamp ();
 // void print_BodyStats (const float3 *r, const float3 *v, const float3 *a, const unsigned long nElem)
-void init_MassPositionVelocity (float4 *r, float4 *v, const unsigned long nElem, const unsigned int config);
+void init_MassPositionVelocity (float3 *r, float3 *v, const unsigned long nElem, const unsigned int config);
 // void *init_Acceleration_SMT (void *arg);
 void print_simulationParameters (unsigned long nElem, unsigned long nIter, unsigned int cpu_threads);
 void print_deviceProperties (int dev, int driverVersion, int runtimeVersion, cudaDeviceProp deviceProp);
-__device__ float3 bodyBodyInteraction (float3 ai, float4 bi, float4 bj);
-__global__ void initAcceleration (float4 *devA, float4 *devX, const unsigned nTiles);
-__device__ float4 calcAcceleration (float4 *devX, unsigned nTiles);
-__global__ void calcIntegration (float4 *devX_ip1, const float4 *devX_i,
-	float4 *devV_i, float4 *devA_i, const unsigned nElem, const unsigned nTiles);
+__device__ float2 bodyBodyInteraction (float2 ai, const float3 bi, const float3 bj);
+__global__ void initAcceleration (float3 *devA, const float3 *devX, const unsigned nTiles);
+__device__ float3 calcAcceleration (const float3 *devX, const unsigned nTiles);
+__global__ void calcIntegration (float3 *devX_ip1, const float3 *devX_i,
+	float3 *devV_i, float3 *devA_i, const unsigned nElem, const unsigned nTiles);
 
 #endif

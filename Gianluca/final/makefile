@@ -6,8 +6,6 @@ NVFLAGS=-ccbin clang++-3.8 -I -m64 -gencode arch=compute_50,code=sm_50 -gencode 
 LIBS=-lm
 
 nbodymake: gpu2.cu
-	#$(CC) $(CFLAGS) -o cpu.o cpu.c $(LIBS)
-	#$(NVCC) $(NVFLAGS) -o gpu.o gpu.cu
 	$(NVCC) $(NVFLAGS) -o gpu.o nbody_helper2.cu gpu2.cu 
 
 .PHONY: clean
