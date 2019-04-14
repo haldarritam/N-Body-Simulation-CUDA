@@ -4,38 +4,37 @@
 #include <math.h>
 #include <pthread.h>
 
-#define MAX_INITIAL_WEIGHT 1000
-#define MAX_INITIAL_RANGE 10000
-#define MAX_INITIAL_VELOCITY 100
-#define EPS 1e-9f
+#define MAX_INITIAL_WEIGHT 100
+#define MAX_INITIAL_RANGE 100
+#define MAX_INITIAL_VELOCITY 1
+#define EPS 0.0001f
 #define NUM_THREADS 32
-#define BLOCK_DIM 32
-#define G 100
+#define G 8
 
 pthread_mutex_t mutex_tid;
 
-typedef struct float3 {
+typedef struct float2 {
         float x;
         float y;
-        float z;
-} float3;
+} float2;
 
-typedef struct float4 {
+typedef struct float3 {
         float w;
         float x;
         float y;
-        float z;
-} float4;
+} float3;
 
 typedef struct nbodyStruct {
         int noElems;
         int maxIteration;
         int cur;
         float dt;
-        float4 *X;
-        float3 *A;
-        float3 *V;
+        float3 *X;
+        float2 *A;
+        float2 *V;
 } nbodyStruct;
+
+nbodyStruct *h_nbody;
 
 // time stamp function in seconds
 double getTimeStamp() {
@@ -45,24 +44,22 @@ double getTimeStamp() {
 }
 
 //initialize velocity and position data
-void initData(float4 *A, float3 *V, int noElems){
+void initData(float3 *A, float2 *V, int noElems){
         for (int i = 0; i < noElems; i++) {
                 A[i].w = (float) rand() / (float) (RAND_MAX / MAX_INITIAL_WEIGHT);
                 A[i].x = (float) rand() / (float) (RAND_MAX / MAX_INITIAL_RANGE);
                 A[i].y = (float) rand() / (float) (RAND_MAX / MAX_INITIAL_RANGE);
-                A[i].z = (float) rand() / (float) (RAND_MAX / MAX_INITIAL_RANGE);
 
                 V[i].x = (float) rand() / (float) (RAND_MAX / MAX_INITIAL_VELOCITY);
                 V[i].y = (float) rand() / (float) (RAND_MAX / MAX_INITIAL_VELOCITY);
-                V[i].z = (float) rand() / (float) (RAND_MAX / MAX_INITIAL_VELOCITY);
         }
 }
 
 // host-side acceleration compution
 void* h_acce(void *arg){
         nbodyStruct *n = (nbodyStruct *) arg;
-        float4 *X = n->X;
-        float3 *A = n->A;
+        float3 *X = n->X;
+        float2 *A = n->A;
         int noElems = n->noElems;
         int len = noElems / NUM_THREADS + 1;
 
@@ -72,26 +69,21 @@ void* h_acce(void *arg){
         n->cur++;
         pthread_mutex_unlock(&mutex_tid);
 
-        float3 r;
+        float2 r;
         for (int i = start; i < end; i++)
         {
                 A[i].x = 0.0f;
                 A[i].y = 0.0f;
-                A[i].z = 0.0f;
                 for (int j = 0; j < noElems; j++)
                 {
                         r.x = X[j].x - X[i].x;
                         r.y = X[j].y - X[i].y;
-                        r.z = X[j].z - X[i].z;
 
-                        float distSqr = r.x * r.x + r.y * r.y + r.z * r.z + EPS;
-                        float distSixth = distSqr * distSqr * distSqr;
-                        float invDistCube = 1.0f/sqrtf(distSixth);
-                        float s = X[j].w * invDistCube * G;
+                        float distSqr = r.x * r.x + r.y * r.y + EPS;
+                        float s = X[j].w * G / sqrtf(distSqr * distSqr * distSqr);
 
                         A[i].x += r.x * s;
                         A[i].y += r.y * s;
-                        A[i].z += r.z * s;
                 }
         }
         return NULL;
@@ -99,8 +91,8 @@ void* h_acce(void *arg){
 
 // host-side preprocess the data
 void h_preprocess(nbodyStruct *nbody, pthread_t *threads){
-        float3 *V = nbody->V;
-        float3 *A = nbody->A;
+        float2 *V = nbody->V;
+        float2 *A = nbody->A;
         int noElems = nbody->noElems;
         float dt = nbody->dt;
 
@@ -113,14 +105,13 @@ void h_preprocess(nbodyStruct *nbody, pthread_t *threads){
         for (int i = 0; i < noElems; i++) {
                 V[i].x += 0.5 * A[i].x * dt;
                 V[i].y += 0.5 * A[i].y * dt;
-                V[i].z += 0.5 * A[i].z * dt;
         }
 }
 
 void* h_updatePosition(void *arg){
         nbodyStruct *n = (nbodyStruct *) arg;
-        float4 *X = n->X;
-        float3 *V = n->V;
+        float3 *X = n->X;
+        float2 *V = n->V;
         int noElems = n->noElems;
         float dt = n->dt;
         int len = (noElems - 1) / NUM_THREADS + 1;
@@ -135,15 +126,14 @@ void* h_updatePosition(void *arg){
         {
                 X[i].x += V[i].x * dt;
                 X[i].y += V[i].y * dt;
-                X[i].z += V[i].z * dt;
         }
         return NULL;
 }
 
 void* h_updateVelocity(void *arg){
         nbodyStruct *n = (nbodyStruct *) arg;
-        float3 *A = n->A;
-        float3 *V = n->V;
+        float2 *A = n->A;
+        float2 *V = n->V;
         int noElems = n->noElems;
         float dt = n->dt;
         int len = noElems / NUM_THREADS + 1;
@@ -158,7 +148,6 @@ void* h_updateVelocity(void *arg){
         {
                 V[i].x += A[i].x * dt;
                 V[i].y += A[i].y * dt;
-                V[i].z += A[i].z * dt;
         }
         return NULL;
 }
@@ -186,11 +175,7 @@ void h_inte(nbodyStruct *nbody, pthread_t *threads){
 
 // host-side function
 void h_func(nbodyStruct *nbody){
-        //float4 *X = nbody -> X;
-        //int noElems = nbody -> noElems;
         int maxIteration = nbody->maxIteration;
-
-        double timeStampA = getTimeStamp();
 
         pthread_t *threads = (pthread_t*) malloc(NUM_THREADS * sizeof(pthread_t));
 
@@ -206,9 +191,6 @@ void h_func(nbodyStruct *nbody){
 /*          fprintf(f, "%.6f %.6f %.6f\n", X[j].x, X[j].y, X[j].z);*/
         }
         fclose(f);
-
-        double timeStampB = getTimeStamp();
-        printf("%.6f\n", timeStampB - timeStampA);
 }
 
 int main( int argc, char *argv[] ) {
@@ -225,10 +207,10 @@ int main( int argc, char *argv[] ) {
         if (argc > 3) maxIteration = atoi(argv[3]);
 
         // alloc memory host-side
-        float4 *h_X = (float4 *) malloc( noElems * sizeof(float4) );
-        float3 *h_A = (float3 *) malloc( noElems * sizeof(float3) );
-        float3 *h_V = (float3 *) malloc( noElems * sizeof(float3) );
-        nbodyStruct *h_nbody = (nbodyStruct*) malloc(sizeof(nbodyStruct));
+        float3 *h_X = (float3 *) malloc( noElems * sizeof(float3) );
+        float2 *h_A = (float2 *) malloc( noElems * sizeof(float2) );
+        float2 *h_V = (float2 *) malloc( noElems * sizeof(float2) );
+        h_nbody = (nbodyStruct*) malloc(sizeof(nbodyStruct));
         h_nbody->noElems = noElems;
         h_nbody->maxIteration = maxIteration;
         h_nbody->dt = dt;
