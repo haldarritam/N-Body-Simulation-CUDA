@@ -127,10 +127,7 @@ int main (int argc, char *argv[])
 	checkCudaErrors (cudaFreeHost (h_dref_v));
 
 	checkCudaErrors (cudaDeviceReset());
-	
 	printf("Device successfully reset.\n");
-	printf("\nElapsed Time: %lfs\n", elapsedTime);
-	printf("Average timestep simulation duration: %lfs\n", elapsedTime/nIter); 
 
 	return 0;
 }

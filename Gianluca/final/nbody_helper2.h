@@ -70,9 +70,9 @@ void init_MassPositionVelocity (float3 *r, float3 *v, const unsigned long nElem,
 void print_simulationParameters (unsigned long nElem, unsigned long nIter, unsigned int cpu_threads);
 void print_deviceProperties (int dev, int driverVersion, int runtimeVersion, cudaDeviceProp deviceProp);
 __device__ float2 bodyBodyInteraction (float2 ai, const float3 bi, const float3 bj);
-__global__ void initAcceleration (float3 *devA, const float3 *devX, const unsigned nTiles);
-__device__ float3 calcAcceleration (const float3 *devX, const unsigned nTiles);
-__global__ void calcIntegration (float3 *devX_ip1, const float3 *devX_i,
+__global__ void initAcceleration (float3 *devA, const float3 *__restrict__ devX, const unsigned nTiles);
+__device__ float3 calcAcceleration (const float3 *__restrict__ devX, const unsigned nTiles);
+__global__ void calcIntegration (float3 *devX_ip1, const float3 *__restrict__ devX_i,
 	float3 *devV_i, float3 *devA_i, const unsigned nElem, const unsigned nTiles);
 
 #endif

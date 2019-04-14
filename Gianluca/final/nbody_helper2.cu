@@ -420,7 +420,7 @@ __device__ float2 bodyBodyInteraction (float2 ai, const float3 bi, const float3 
 	return ai;
 }
 
-__global__ void initAcceleration (float3 *devA, const float3 *devX, const unsigned nTiles)
+__global__ void initAcceleration (float3 *devA, const float3 *__restrict__ devX, const unsigned nTiles)
 {
 	unsigned int gtid = blockIdx.x * BLOCK_SIZE + threadIdx.x;
 	__shared__ float3 shPosition3[BLOCK_SIZE];
@@ -444,7 +444,7 @@ __global__ void initAcceleration (float3 *devA, const float3 *devX, const unsign
 	devA[gtid] = (float3) {G*acc2.x, G*acc2.y, 0.0f};
 }
 
-__device__ float3 calcAcceleration (const float3 *devX, const unsigned nTiles)
+__device__ float3 calcAcceleration (const float3 *__restrict__ devX, const unsigned nTiles)
 {
 	unsigned int gtid = blockIdx.x * BLOCK_SIZE + threadIdx.x;
 	__shared__ float3 shPosition3[BLOCK_SIZE];
@@ -470,7 +470,7 @@ __device__ float3 calcAcceleration (const float3 *devX, const unsigned nTiles)
 	return acc3;
 }
 
-__global__ void calcIntegration (float3 *devX_ip1, const float3 *devX_i,
+__global__ void calcIntegration (float3 *devX_ip1, const float3 *__restrict__ devX_i,
 	float3 *devV_i, float3 *devA_i, const unsigned nElem, const unsigned nTiles)
 {
 	unsigned int gtid = blockIdx.x * blockDim.x + threadIdx.x;
