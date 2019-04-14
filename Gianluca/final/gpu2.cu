@@ -44,7 +44,7 @@ int main (int argc, char *argv[])
 	
 	size_t nBytes = nElem * sizeof(float3);
 
-	// allocating page-locked memory for higher communication bandwidth during real-time vis.
+	// allocating page-locked memory fobattle for wenothr higher communication bandwidth during real-time vis.
 	checkCudaErrors (cudaMallocHost ((void**) &h_dref_r, nBytes));
 	checkCudaErrors (cudaMallocHost ((void**) &h_dref_v, nBytes));
 
@@ -61,11 +61,11 @@ int main (int argc, char *argv[])
 	//print_BodyStats(h_m, h_r1, h_v1, h_a1);
 
 	// setting shmem and L1 cache config. 
-	// 		cudaFuncCachePreferNone:	no preference (default)
-	//		cudaFuncCachePreferShared:	prefer 48kB shared memory and 16kB L1 cache
+	// 		cudaFuncCachePreferNone:	no preference (default) - 0.1152s
+	//		cudaFuncCachePreferShared:	prefer 48kB shared memory and 16kB L1 cache - 0.1168s
 	//		cudaFuncCachePreferL1:		prefer 48kB L1 cache and 16kB shmem
 	//		cudaFuncCachePreferEqual:	prefer 32kB L1 cache and 32kB shmem
-	cudaFuncCache cacheConfig = cudaFuncCachePreferNone;
+	cudaFuncCache cacheConfig = cudaFuncCachePreferShared;
 	checkCudaErrors (cudaDeviceSetCacheConfig (cacheConfig));
 
 	// copying initialized data from host to device
@@ -74,7 +74,7 @@ int main (int argc, char *argv[])
 	checkCudaErrors (cudaMemcpy (d_v,    h_dref_v, nBytes, cudaMemcpyHostToDevice));
 
 	// compute initial acceleration of bodies on device
-	dim3 block_size (1024);
+	dim3 block_size (BLOCK_SIZE);
 	dim3 grid_size	((nElem + block_size.x-1)/(block_size.x));
 	unsigned int nTiles = (nElem + block_size.x-1)/block_size.x;
 	printf("Computing initial acceleration on device. Time Taken: ");

@@ -1,16 +1,5 @@
 #include "nbody_helper2.h"
 
-// UNIVERSE US;
-
-// inline void gpuAssert(cudaError_t code, const char *file, int line, bool abort=true)
-// {
-// 	if (code != cudaSuccess)
-// 	{
-// 		fprintf(stderr,"GPUassert: %s %s %d\n", cudaGetErrorString(code), file, line);
-// 		if (abort) exit(code);
-// 	}
-// }
-
 // time stamp function in seconds 
 double getTimeStamp()
 {     
@@ -433,19 +422,19 @@ __device__ float2 bodyBodyInteraction (float2 ai, const float3 bi, const float3 
 
 __global__ void initAcceleration (float3 *devA, const float3 *devX, const unsigned nTiles)
 {
-	unsigned int gtid = blockIdx.x * blockDim.x + threadIdx.x;
-	__shared__ float3 shPosition3[1024];
+	unsigned int gtid = blockIdx.x * BLOCK_SIZE + threadIdx.x;
+	__shared__ float3 shPosition3[BLOCK_SIZE];
 	
 	float3 myPosition3;
 	float2 acc2 = {0.0f, 0.0f};
 	
 	myPosition3 = devX[gtid];
-	for (unsigned int tile=0; tile<nTiles; tile++) {
-		shPosition3[threadIdx.x] = devX[ tile*blockDim.x + threadIdx.x ];
+	for (unsigned tile=0; tile<nTiles; tile++) {
+		shPosition3[threadIdx.x] = devX[ tile*BLOCK_SIZE + threadIdx.x ];
 		__syncthreads();	// Wait for all threads in block to load data
 							// ... into shared memory
-		//#pragma unroll 4
-		for (unsigned int j=0; j<blockDim.x; j++)
+		#pragma unroll (16)
+		for (unsigned j=0; j<BLOCK_SIZE; j++)
 			acc2 = bodyBodyInteraction(acc2, myPosition3, shPosition3[j]);
 
 		__syncthreads();	// wait for all threads in block to complete their
@@ -457,19 +446,20 @@ __global__ void initAcceleration (float3 *devA, const float3 *devX, const unsign
 
 __device__ float3 calcAcceleration (const float3 *devX, const unsigned nTiles)
 {
-	unsigned int gtid = blockIdx.x * blockDim.x + threadIdx.x;
-	__shared__ float3 shPosition3[1024];
+	unsigned int gtid = blockIdx.x * BLOCK_SIZE + threadIdx.x;
+	__shared__ float3 shPosition3[BLOCK_SIZE];
 	
 	float3 myPosition3;
 	float2 acc2 = {0.0f, 0.0f};
 	
 	myPosition3 = devX[gtid];
 	for (unsigned tile=0; tile<nTiles; tile++) {
-		shPosition3[threadIdx.x] = devX[ tile*blockDim.x + threadIdx.x ];
+		shPosition3[threadIdx.x] = devX[ tile*BLOCK_SIZE + threadIdx.x ];
 		__syncthreads();	// Wait for all threads in block to load data
 							// ... into shared memory
-		//#pragma unroll 4
-		for (unsigned j=0; j<blockDim.x; j++)
+
+		#pragma unroll (16)
+		for (unsigned j=0; j<BLOCK_SIZE; j++)
 			acc2 = bodyBodyInteraction(acc2, myPosition3, shPosition3[j]);
 		
 		__syncthreads();	// wait for all threads in block to complete their

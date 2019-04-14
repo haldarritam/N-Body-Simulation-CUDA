@@ -13,6 +13,7 @@
 
 // global constants
 #define NUM_CPU_THREADS 32
+#define BLOCK_SIZE 1024
 #define ND 2				// number of spatial dimensions
 #define MIN_MASS 0.1f
 #define MAX_MASS 1.0f
@@ -26,6 +27,7 @@
 #define DTSQd2 0.00000190734f	// (time step squared) divided by 2
 #define DAMPENING 1.0f
 #define SOFTENING 1.0f
+#define UNROLL_LENGTH 16
 // #define checkCudaErrors(ans) { gpuAssert((ans), __FILE__, __LINE__); }
 
 #define checkCudaErrors(ans) { gpuAssert((ans), __FILE__, __LINE__); }
