@@ -7,10 +7,6 @@ unsigned long count = 0;
 
 FILE *destFile;
 
-typedef struct float3 {
-	float x, y, z;
-} float3;
-
 void *computeHost_SMT (void *arg);
 
 int main(int argc, char const *argv[])
