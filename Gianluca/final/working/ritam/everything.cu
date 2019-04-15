@@ -57,11 +57,11 @@ int main (int argc, char *argv[])
 
 	printf("Initializing animation window.\n");
 	char char_buffer[20] = "Time per frame: 0\n";
-	
+
 	sf::ContextSettings settings;
 	settings.antialiasingLevel = 8;
 	sf::RenderWindow window(sf::VideoMode(X_RES, Y_RES), "N-Body Simulation", sf::Style::Default, settings);
-	
+
 	sf::Font font;
 	if(!font.loadFromFile("./font/bignoodletitling/big_noodle_titling.ttf")) {
 		printf("Error while loding font.\n");
@@ -73,7 +73,7 @@ int main (int argc, char *argv[])
 	text.setString(char_buffer);
 	text.setCharacterSize(24);
 	text.setFillColor(sf::Color::Red);
-	
+
 	sf::Clock real_clock;
 	sf::Clock* clock = &real_clock;
 
@@ -83,7 +83,7 @@ int main (int argc, char *argv[])
 
 	float3 *h_r[2], *h_v;
 	float3 *d_r[2], *d_v, *d_a;
-	
+
 	size_t nBytes = nElem * sizeof(float3);
 
 	// allocating page-locked memory fobattle for wenothr higher communication bandwidth during real-time vis.
@@ -95,7 +95,7 @@ int main (int argc, char *argv[])
 	checkCudaErrors (cudaMalloc ((void**) &(d_r[1]), nBytes));
 	checkCudaErrors (cudaMalloc ((void**) &(d_v),    nBytes));
 	checkCudaErrors (cudaMalloc ((void**) &(d_a),    nBytes));
-	
+
 
 	printf("Initializing bodies' positions / velocities on HOST. Time taken: ");
 	double time0 = getTimeStamp();
@@ -104,9 +104,9 @@ int main (int argc, char *argv[])
 	printf ("%lfs\n", getTimeStamp()-time0);
 	//print_BodyStats(h_m, h_r1, h_v1, h_a1);
 
-	// setting shmem and L1 cache config. 
+	// setting shmem and L1 cache config.
 	// 		cudaFuncCachePreferNone:	no preference (default)
-	//		cudaFuncCachePreferShared:	prefer 48kB shared memory and 16kB L1 cache 
+	//		cudaFuncCachePreferShared:	prefer 48kB shared memory and 16kB L1 cache
 	//		cudaFuncCachePreferL1:		prefer 48kB L1 cache and 16kB shmem
 	//		cudaFuncCachePreferEqual:	prefer 32kB L1 cache and 32kB shmem
 	cudaFuncCache cacheConfig = cudaFuncCachePreferShared;
@@ -131,7 +131,7 @@ int main (int argc, char *argv[])
 	/////////////////////////////////////////////////////////////////////////////////////////////////
 	/// PERFORMING SIMULATION ON DEVICE
 	/////////////////////////////////////////////////////////////////////////////////////////////////
-	
+
 	// creating 2 streams for compute and for d2h communication
 	cudaStream_t *streams = (cudaStream_t *) malloc(2*sizeof(cudaStream_t));
 	cudaStreamCreate (&streams[0]);	// d2h communication
@@ -142,9 +142,9 @@ int main (int argc, char *argv[])
 
 	unsigned iter=0, stop=0;
 	double time10, time11;
-	
+
 	printf("Just Before while loop.\n");
-	
+
 	while ((window.isOpen() && !stop) || (limit_iter && (iter < nIter))) {
 		cudaMemcpyAsync (h_r[iter%2], d_r[iter%2], nBytes, cudaMemcpyDeviceToHost, streams[0]);
 		calcIntegration <<<grid_size, block_size, 0, streams[1]>>> (
@@ -154,34 +154,35 @@ int main (int argc, char *argv[])
 			d_a, 				// pointer to curr accelerations
 			nElem, 				// number of bodies in simulation
 			nTiles);			// number of shared memory sections per block
-		
+
 		checkCudaErrors (cudaStreamSynchronize (streams[1]));
-		
+
 		time10 = getTimeStamp();
 		window.clear();
 		time11 = getTimeStamp();
+		#pragma unroll(16)
 		for (unsigned elem=0; elem<nElem; elem++) {
 			body_graphics[elem].setPosition(h_r[iter%2][elem].x, h_r[iter%2][elem].y);
 			window.draw(body_graphics[elem]);
 		}
-		
+
 		// displaying frame time in window
-		GetFrameRate(char_buffer, clock);	
+		GetFrameRate(char_buffer, clock);
 		text.setString(char_buffer);
 		window.draw(text);
 		window.display();
 
 		iter++;
-		
+
 		sf::Event event;
 		while (window.pollEvent(event))
 		{
 			if (event.type == sf::Event::Closed)
 				window.close();
 		}
-		printf("%.4fms\t%0.4fms\n", 
+		printf("%.4fms\t%0.4fms\n",
 			(time11-time10)*1000, (getTimeStamp()-time11)*1000);
-		
+
 		if (limit_iter && (iter == nIter)) {
 			stop = 1;
 			window.close();
@@ -208,7 +209,7 @@ int main (int argc, char *argv[])
 	checkCudaErrors (cudaFree (d_r[1]));
 	checkCudaErrors (cudaFree (d_v));
 	checkCudaErrors (cudaFree (d_a));
-	
+
 	// free page-locked ("pinned") memory on system DRAM
 	checkCudaErrors (cudaFreeHost (h_r[0]));
 	checkCudaErrors (cudaFreeHost (h_r[1]));
@@ -246,9 +247,9 @@ int main (int argc, char *argv[])
 
 
 
-// time stamp function in seconds 
+// time stamp function in seconds
 double getTimeStamp()
-{     
+{
     struct timeval tv;
 	gettimeofday (&tv, NULL);
 	return (double) tv.tv_usec/1000000 + tv.tv_sec;
@@ -278,7 +279,7 @@ inline float normalize (float2 v0)
 		v0.x *= 1e6;
 		v0.y *= 1e6;
 	}
-	
+
 	return dist;
 }
 
@@ -300,8 +301,8 @@ inline float rand_sign ()
 
 inline void GetFrameRate(char* char_buffer, sf::Clock* clock)
 {
-	sf::Time time = clock->getElapsedTime();	
-	sprintf(char_buffer,"Time per frame: %i ms\n", time.asMilliseconds());	
+	sf::Time time = clock->getElapsedTime();
+	sprintf(char_buffer,"Time per frame: %i ms\n", time.asMilliseconds());
 	clock->restart();
 }
 
@@ -327,7 +328,7 @@ void init_MassPositionVelocity (float3 *r, float3 *v, const unsigned long nElem,
 	float x, y, radius, angle, system_mass, speed_factor, tangential_speed;
 	float shell_radius, shell_thickness, radial_velocity;
 	float2 CoM, dist, unit_dist;
-	
+
 	// graphics variables
 	sf::CircleShape shape_green(SIZE_OF_BODIES);
 	shape_green.setFillColor(sf::Color::Green);
@@ -444,7 +445,7 @@ void init_MassPositionVelocity (float3 *r, float3 *v, const unsigned long nElem,
 					unit_dist.x = dist.x / radius;
 					unit_dist.y = dist.y / radius;
 					tangential_speed = sqrtf(G*system_mass/radius) * 0.8f;
-				
+
 					v[idx].x =    unit_dist.y * tangential_speed;
 					v[idx].y = -1*unit_dist.x * tangential_speed;
 					v[idx].z = 0.0f;
@@ -481,7 +482,7 @@ void init_MassPositionVelocity (float3 *r, float3 *v, const unsigned long nElem,
 				unit_dist.x = dist.x / radius;
 				unit_dist.y = dist.y / radius;
 				tangential_speed = sqrtf(G*system_mass/radius) * 1.1;
-				
+
 				v[idx].x =    unit_dist.y * tangential_speed;
 				v[idx].y = -1*unit_dist.x * tangential_speed;
 				v[idx].z = 0.0f;
@@ -517,7 +518,7 @@ void init_MassPositionVelocity (float3 *r, float3 *v, const unsigned long nElem,
 				unit_dist.x = dist.x / radius;
 				unit_dist.y = dist.y / radius;
 				tangential_speed = sqrtf(G*system_mass/radius) * 1.1;
-				
+
 				v[idx].x =    unit_dist.y * tangential_speed;
 				v[idx].y = -1*unit_dist.x * tangential_speed;
 				v[idx].z = 0.0f;
@@ -563,7 +564,7 @@ void print_deviceProperties (int dev, int driverVersion, int runtimeVersion, cud
 	printf("  Total amount of global memory: %.2f GB (%llu B)\n",
 		(float) deviceProp.totalGlobalMem/pow(1024.0,3),
 		(unsigned long long) deviceProp.totalGlobalMem);
-	printf("  Total amount of constant memory: %4.2f kB\n", 
+	printf("  Total amount of constant memory: %4.2f kB\n",
 		deviceProp.totalConstMem/1024.0);
 	printf("  Total amount of shared memory per block: %4.2f kB\n",
 		deviceProp.sharedMemPerBlock/1024.0);
@@ -583,7 +584,7 @@ void print_deviceProperties (int dev, int driverVersion, int runtimeVersion, cud
 		deviceProp.maxGridSize[0], deviceProp.maxGridSize[1],
 		deviceProp.maxGridSize[2]);
 	printf("  Maximum memory pitch: %lu B\n", deviceProp.memPitch);
-	printf("  Memory Clock Rate (MHz): %.1f\n", 
+	printf("  Memory Clock Rate (MHz): %.1f\n",
 		deviceProp.memoryClockRate/1e3);
 	printf("  Memory Bus Width (b): %d\n", deviceProp.memoryBusWidth);
 	printf("  Peak Memory Bandwidth (GB/s): %.2f\n\n",
@@ -593,15 +594,15 @@ void print_deviceProperties (int dev, int driverVersion, int runtimeVersion, cud
 __device__ float2 bodyBodyInteraction (float2 ai, const float3 bi, const float3 bj)
 {
 	float2 dist;
-	
+
 	dist.x = bj.x - bi.x;
 	dist.y = bj.y - bi.y;
-	
+
 	float distSqr = dist.x*dist.x + dist.y*dist.y + SOFTENING;
 	float invDistCube = rsqrtf(distSqr * distSqr * distSqr);
-	
+
 	float s = bj.z * invDistCube;
-	
+
 	ai.x += s * dist.x;
 	ai.y += s * dist.y;
 	return ai;
@@ -611,10 +612,10 @@ __global__ void initAcceleration (float3 *devA, const float3 *__restrict__ devX,
 {
 	unsigned int gtid = blockIdx.x * BLOCK_SIZE + threadIdx.x;
 	__shared__ float3 shPosition3[BLOCK_SIZE];
-	
+
 	float3 myPosition3;
 	float2 acc2 = {0.0f, 0.0f};
-	
+
 	myPosition3 = devX[gtid];
 	for (unsigned tile=0; tile<nTiles; tile++) {
 		shPosition3[threadIdx.x] = devX[ tile*BLOCK_SIZE + threadIdx.x ];
@@ -627,7 +628,7 @@ __global__ void initAcceleration (float3 *devA, const float3 *__restrict__ devX,
 		__syncthreads();	// wait for all threads in block to complete their
 							// ... computations to not overwrite sh. mem.
 	}
-	
+
 	devA[gtid] = (float3) {G*acc2.x, G*acc2.y, 0.0f};
 }
 
@@ -635,10 +636,10 @@ __device__ float3 calcAcceleration (const float3 *__restrict__ devX, const unsig
 {
 	unsigned int gtid = blockIdx.x * BLOCK_SIZE + threadIdx.x;
 	__shared__ float3 shPosition3[BLOCK_SIZE];
-	
+
 	float3 myPosition3;
 	float2 acc2 = {0.0f, 0.0f};
-	
+
 	myPosition3 = devX[gtid];
 	for (unsigned tile=0; tile<nTiles; tile++) {
 		shPosition3[threadIdx.x] = devX[ tile*BLOCK_SIZE + threadIdx.x ];
@@ -648,11 +649,11 @@ __device__ float3 calcAcceleration (const float3 *__restrict__ devX, const unsig
 		#pragma unroll (16)
 		for (unsigned j=0; j<BLOCK_SIZE; j++)
 			acc2 = bodyBodyInteraction(acc2, myPosition3, shPosition3[j]);
-		
+
 		__syncthreads();	// wait for all threads in block to complete their
 							// ... computations to not overwrite sh. mem.
 	}
-	
+
 	float3 acc3 = {G*acc2.x, G*acc2.y, 0.0f};
 	return acc3;
 }
@@ -662,12 +663,12 @@ __global__ void calcIntegration (float3 *devX_ip1, const float3 *__restrict__ de
 {
 	unsigned int gtid = blockIdx.x * blockDim.x + threadIdx.x;
 	if (gtid < nElem) {
-		// if (gtid == 1) 
+		// if (gtid == 1)
 		// 	printf("x: %.6f\ty: %.6f\tm: %.6f\n", devX_i[gtid].x, devX_i[gtid].y, devX_i[gtid].z);
 		float3 old_acc = devA_i[gtid];
 		float3 old_vel = devV_i[gtid];
 		float3 old_pos = devX_i[gtid];
-		
+
 		devX_ip1[gtid].x = old_pos.x + old_vel.x*DT + old_acc.x*DTSQd2;
 		devX_ip1[gtid].y = old_pos.y + old_vel.y*DT + old_acc.y*DTSQd2;
 		float3 new_acc   = calcAcceleration (devX_i, nTiles);

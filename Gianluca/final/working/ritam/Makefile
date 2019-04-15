@@ -4,7 +4,7 @@ LIB := ./lib
 CC := nvcc
 SRC := $(OBJ).cu
 OSRC := $(OBJ).o
-OBJFLAGS := -arch=sm_52 -ccbin clang++ -I $(INC) 
+OBJFLAGS := -arch=sm_52 -ccbin clang++ -Xptxas -dlcm=cg -O3 -I $(INC) 
 CFLAGS := -arch=sm_52 -ccbin clang++ -L $(LIB) -lsfml-graphics -lsfml-window -lsfml-system 
 
 all : main.o
