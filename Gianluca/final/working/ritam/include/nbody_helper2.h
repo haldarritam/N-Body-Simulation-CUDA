@@ -14,7 +14,7 @@
 #include <SFML/Graphics.hpp>
 
 // global constants
-#define NUM_CPU_THREADS 32
+#define NUM_CPU_THREADS 2
 #define BLOCK_SIZE 1024
 #define ND 2				// number of spatial dimensions
 #define MIN_MASS 0.1f
@@ -83,6 +83,7 @@ __device__ float3 calcAcceleration (const float3 *__restrict__ devX, const unsig
 __global__ void calcIntegration (float3 *devX_ip1, const float3 *__restrict__ devX_i,
 	float3 *devV_i, float3 *devA_i, const unsigned nElem, const unsigned nTiles);
 void *computeHost_SMT (void *arg);
+void *nbody_display_SMT (void *arg);
 
 #endif
 

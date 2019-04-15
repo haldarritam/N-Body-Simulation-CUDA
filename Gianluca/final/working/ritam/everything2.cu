@@ -4,12 +4,17 @@
 #include <time.h>
 #include <cuda.h>
 #include <vector>
+#include <signal.h>
 #include <stdbool.h>
 #include <SFML/Graphics.hpp>
 #include "nbody_helper2.h"
 
 std::vector<sf::CircleShape> body_graphics;
 
+volatile sig_atomic_t stop;
+void catchSIGINT(int signum){
+	stop = 1;
+}
 
 int main (int argc, char *argv[])
 {
@@ -23,6 +28,7 @@ int main (int argc, char *argv[])
 	unsigned int nIter = 100;
 	bool limit_iter = false;
 	char *ptr1, *ptr2, *ptr3;
+	signal(SIGINT, catchSIGINT);
 
 	// acquiring command line arguments, if any.
 	if (argc > 1)	// no. of elements
@@ -140,8 +146,7 @@ int main (int argc, char *argv[])
 	printf("Computing positions on device.\n");
 	double timestamp_GPU_start = getTimeStamp();
 
-	unsigned iter=0, stop=0;
-	double time10, time11;
+	unsigned iter=0;
 	
 	printf("Just Before while loop.\n");
 	
@@ -157,9 +162,7 @@ int main (int argc, char *argv[])
 		
 		checkCudaErrors (cudaStreamSynchronize (streams[1]));
 		
-		time10 = getTimeStamp();
 		window.clear();
-		time11 = getTimeStamp();
 		for (unsigned elem=0; elem<nElem; elem++) {
 			body_graphics[elem].setPosition(h_r[iter%2][elem].x, h_r[iter%2][elem].y);
 			window.draw(body_graphics[elem]);
@@ -179,8 +182,6 @@ int main (int argc, char *argv[])
 			if (event.type == sf::Event::Closed)
 				window.close();
 		}
-		printf("%.4fms\t%0.4fms\n", 
-			(time11-time10)*1000, (getTimeStamp()-time11)*1000);
 		
 		if (limit_iter && (iter == nIter)) {
 			stop = 1;

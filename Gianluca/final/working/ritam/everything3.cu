@@ -4,12 +4,30 @@
 #include <time.h>
 #include <cuda.h>
 #include <vector>
+#include <signal.h>
 #include <stdbool.h>
 #include <SFML/Graphics.hpp>
 #include "nbody_helper2.h"
+#include <pthread.h>
 
 std::vector<sf::CircleShape> body_graphics;
+sf::RenderWindow window;
 
+volatile sig_atomic_t stop;
+void catchSIGINT(int signum){
+	stop = 1;
+}
+
+float3 *h_r[2], *h_v;
+
+typedef struct  {
+	float3 *r1;
+	float3 *r2;
+	float nElem;
+	unsigned int iter;
+} SYSTEM;
+
+SYSTEM sys;
 
 int main (int argc, char *argv[])
 {
@@ -23,6 +41,7 @@ int main (int argc, char *argv[])
 	unsigned int nIter = 100;
 	bool limit_iter = false;
 	char *ptr1, *ptr2, *ptr3;
+	signal(SIGINT, catchSIGINT);
 
 	// acquiring command line arguments, if any.
 	if (argc > 1)	// no. of elements
@@ -39,7 +58,6 @@ int main (int argc, char *argv[])
 	/// SETTING UP DEVICE
 	/////////////////////////////////////////////////////////////////////////////////////////////////
 
-	printf("Setting up device.\n");
 	int dev = 0, driverVersion = 0, runtimeVersion = 0;
 	cudaDeviceProp deviceProp;
 	checkCudaErrors (cudaGetDeviceProperties (&deviceProp, dev));
@@ -55,12 +73,11 @@ int main (int argc, char *argv[])
 	/// Initializing the animation window
 	/////////////////////////////////////////////////////////////////////////////////////////////////
 
-	printf("Initializing animation window.\n");
 	char char_buffer[20] = "Time per frame: 0\n";
 	
 	sf::ContextSettings settings;
 	settings.antialiasingLevel = 8;
-	sf::RenderWindow window(sf::VideoMode(X_RES, Y_RES), "N-Body Simulation", sf::Style::Default, settings);
+	window.create(sf::VideoMode(X_RES, Y_RES), "N-Body Simulation", sf::Style::Default, settings);
 	
 	sf::Font font;
 	if(!font.loadFromFile("./font/bignoodletitling/big_noodle_titling.ttf")) {
@@ -81,7 +98,7 @@ int main (int argc, char *argv[])
 	/// INITIALIZING SIMULATION
 	/////////////////////////////////////////////////////////////////////////////////////////////////
 
-	float3 *h_r[2], *h_v;
+	//float3 *h_r[2], *h_v;
 	float3 *d_r[2], *d_v, *d_a;
 	
 	size_t nBytes = nElem * sizeof(float3);
@@ -95,14 +112,16 @@ int main (int argc, char *argv[])
 	checkCudaErrors (cudaMalloc ((void**) &(d_r[1]), nBytes));
 	checkCudaErrors (cudaMalloc ((void**) &(d_v),    nBytes));
 	checkCudaErrors (cudaMalloc ((void**) &(d_a),    nBytes));
-	
 
 	printf("Initializing bodies' positions / velocities on HOST. Time taken: ");
 	double time0 = getTimeStamp();
-	printf("Initializing Mass Position Velocity.\n");
 	init_MassPositionVelocity(h_r[0], h_v, nElem, config);
 	printf ("%lfs\n", getTimeStamp()-time0);
-	//print_BodyStats(h_m, h_r1, h_v1, h_a1);
+	
+	sys.r1 = h_r[0];
+	sys.r2 = h_r[0];
+	sys.nElem = nElem;
+	sys.iter = 0;
 
 	// setting shmem and L1 cache config. 
 	// 		cudaFuncCachePreferNone:	no preference (default)
@@ -123,7 +142,6 @@ int main (int argc, char *argv[])
 	unsigned int nTiles = (nElem + block_size.x-1)/block_size.x;
 	printf("Computing initial acceleration on device. Time Taken: ");
 	time0 = getTimeStamp();
-	printf("Init Accleration.\n");
 	initAcceleration <<<grid_size, block_size, 0, 0>>> (d_a, d_r[0], nTiles);
 	cudaDeviceSynchronize ();
 	printf ("%lfs\n", getTimeStamp()-time0);
@@ -137,14 +155,19 @@ int main (int argc, char *argv[])
 	cudaStreamCreate (&streams[0]);	// d2h communication
 	cudaStreamCreate (&streams[1]);	// compute
 
-	printf("Computing positions on device.\n");
 	double timestamp_GPU_start = getTimeStamp();
 
-	unsigned iter=0, stop=0;
-	double time10, time11;
 	
-	printf("Just Before while loop.\n");
-	
+    // for portability, explicity create threads in a joinable state
+    pthread_t threads [NUM_CPU_THREADS];
+    pthread_attr_t attr;
+    pthread_attr_init (&attr);
+    pthread_attr_setdetachstate (&attr, PTHREAD_CREATE_JOINABLE);
+    unsigned int rc;
+    void *status;
+    
+    unsigned long i;
+    unsigned iter=0;
 	while ((window.isOpen() && !stop) || (limit_iter && (iter < nIter))) {
 		cudaMemcpyAsync (h_r[iter%2], d_r[iter%2], nBytes, cudaMemcpyDeviceToHost, streams[0]);
 		calcIntegration <<<grid_size, block_size, 0, streams[1]>>> (
@@ -157,14 +180,30 @@ int main (int argc, char *argv[])
 		
 		checkCudaErrors (cudaStreamSynchronize (streams[1]));
 		
-		time10 = getTimeStamp();
 		window.clear();
-		time11 = getTimeStamp();
-		for (unsigned elem=0; elem<nElem; elem++) {
-			body_graphics[elem].setPosition(h_r[iter%2][elem].x, h_r[iter%2][elem].y);
-			window.draw(body_graphics[elem]);
+		
+		// creating the threads
+		sys.iter = iter;
+		for (i=0; i<NUM_CPU_THREADS; i++) {
+		    rc = pthread_create (&threads[i], &attr, nbody_display_SMT, (void *) i);
+		    if (rc) {
+		        printf("Error; return code from pthread_create() is %d.\n", rc);
+		        exit(EXIT_FAILURE);
+		    }
 		}
 		
+		// wait on the other threads
+		for (i=0; i<NUM_CPU_THREADS; i++) {
+			rc = pthread_join (threads[i], &status);
+			if (rc) {
+				printf("ERROR; return code from pthread_join() is %d.\n", rc);
+				exit(EXIT_FAILURE);
+			}
+			// printf("main(): completed join with thread #%ld having status of %ld\n",
+			// 	i, (long) status);
+		}
+		
+
 		// displaying frame time in window
 		GetFrameRate(char_buffer, clock);	
 		text.setString(char_buffer);
@@ -179,8 +218,6 @@ int main (int argc, char *argv[])
 			if (event.type == sf::Event::Closed)
 				window.close();
 		}
-		printf("%.4fms\t%0.4fms\n", 
-			(time11-time10)*1000, (getTimeStamp()-time11)*1000);
 		
 		if (limit_iter && (iter == nIter)) {
 			stop = 1;
@@ -217,6 +254,9 @@ int main (int argc, char *argv[])
 	checkCudaErrors (cudaDeviceReset());
 	printf("Device successfully reset.\n");
 
+	pthread_attr_destroy (&attr);
+	pthread_exit (NULL);
+
 	return 0;
 }
 
@@ -230,21 +270,27 @@ int main (int argc, char *argv[])
 
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+void *nbody_display_SMT (void *arg)
+{
+	unsigned int start, end, len, offset, nElem, iter, i;
+	
+	nElem = sys.nElem;
+	iter = sys.iter;
+	printf("Here\n");
+	
+	offset = (unsigned long) arg;
+	len = (unsigned int) nElem / NUM_CPU_THREADS;
+	start = offset * len;
+	end = start + len;
+	
+	for (i=start; i<end; i++) {
+		body_graphics[i].setPosition(h_r[iter%2][i].x, h_r[iter%2][i].y);
+		window.draw(body_graphics[i]);
+	}
+	
+	printf("There\n");
+	pthread_exit (NULL);
+}
 
 // time stamp function in seconds 
 double getTimeStamp()
