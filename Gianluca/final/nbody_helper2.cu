@@ -309,47 +309,47 @@ void init_MassPositionVelocity (float3 *r, float3 *v, const unsigned long nElem,
 	}
 }
 
-// void *init_Acceleration_SMT (void *arg)
-// {
-// 	// define local variables for convenience
-// 	unsigned long start, end, len, offset, nElem;
+/*void *init_Acceleration_SMT (void *arg)
+{
+	// define local variables for convenience
+	unsigned long start, end, len, offset, nElem;
 
-// 	nElem = US.nElem;
-// 	offset = (unsigned long) arg;
-// 	len = (unsigned long) US.nElem / NUM_CPU_THREADS;
-// 	start = offset * len;
-// 	end = start + len;
+	nElem = US.nElem;
+	offset = (unsigned long) arg;
+	len = (unsigned long) US.nElem / NUM_CPU_THREADS;
+	start = offset * len;
+	end = start + len;
 
-// 	unsigned long i, j;
-// 	float ax_ip1, ay_ip1, az_ip1;
-// 	float dx_ip1, dy_ip1, dz_ip1, rDistSquared, MinvDistCubed;
-// 	float **i_r = &(US.r1);
-// 	float **o_a = &(US.a1);
+	unsigned long i, j;
+	float ax_ip1, ay_ip1, az_ip1;
+	float dx_ip1, dy_ip1, dz_ip1, rDistSquared, MinvDistCubed;
+	float **i_r = &(US.r1);
+	float **o_a = &(US.a1);
 
-// 	// calculating NEXT acceleration of each body from the position of every other bodies
-// 	// ... and NEXT velocity of each body utilizing the next acceleration
-// 	for (i=start; i<end; i++) {
-// 		ax_ip1 = 0.0;
-// 		ay_ip1 = 0.0;
-// 		az_ip1 = 0.0;
-// 		for (j=0; j<nElem; j++) {
-// 			dx_ip1 = *(*i_r + (ND*j+0)) - *(*i_r + (ND*i+0));
-// 			dy_ip1 = *(*i_r + (ND*j+1)) - *(*i_r + (ND*i+1));
-// 			dz_ip1 = *(*i_r + (ND*j+2)) - *(*i_r + (ND*i+2));
-// 			rDistSquared = dx_ip1*dx_ip1 + dy_ip1*dy_ip1 + dz_ip1*dz_ip1 + SOFTENING;
-// 			MinvDistCubed = US.m[j]/sqrtf(rDistSquared*rDistSquared*rDistSquared);
-// 			ax_ip1 += dx_ip1 * MinvDistCubed;
-// 			ay_ip1 += dy_ip1 * MinvDistCubed;
-// 			az_ip1 += dz_ip1 * MinvDistCubed;
-// 		}
+	// calculating NEXT acceleration of each body from the position of every other bodies
+	// ... and NEXT velocity of each body utilizing the next acceleration
+	for (i=start; i<end; i++) {
+		ax_ip1 = 0.0;
+		ay_ip1 = 0.0;
+		az_ip1 = 0.0;
+		for (j=0; j<nElem; j++) {
+			dx_ip1 = *(*i_r + (ND*j+0)) - *(*i_r + (ND*i+0));
+			dy_ip1 = *(*i_r + (ND*j+1)) - *(*i_r + (ND*i+1));
+			dz_ip1 = *(*i_r + (ND*j+2)) - *(*i_r + (ND*i+2));
+			rDistSquared = dx_ip1*dx_ip1 + dy_ip1*dy_ip1 + dz_ip1*dz_ip1 + SOFTENING;
+			MinvDistCubed = US.m[j]/sqrtf(rDistSquared*rDistSquared*rDistSquared);
+			ax_ip1 += dx_ip1 * MinvDistCubed;
+			ay_ip1 += dy_ip1 * MinvDistCubed;
+			az_ip1 += dz_ip1 * MinvDistCubed;
+		}
 
-// 		*(*o_a + (ND*i+0)) = G*ax_ip1;
-// 		*(*o_a + (ND*i+1)) = G*ay_ip1;
-// 		*(*o_a + (ND*i+2)) = G*az_ip1;
-// 	}
+		*(*o_a + (ND*i+0)) = G*ax_ip1;
+		*(*o_a + (ND*i+1)) = G*ay_ip1;
+		*(*o_a + (ND*i+2)) = G*az_ip1;
+	}
 
-// 	pthread_exit (NULL);
-// }
+	pthread_exit (NULL);
+}*/
 
 
 
@@ -489,3 +489,215 @@ __global__ void calcIntegration (float3 *devX_ip1, const float3 *__restrict__ de
 		devA_i  [gtid]   = new_acc;
 	}
 }
+
+/*void *computeHost_SMT (void *arg)
+{
+	// define local variables for convenience
+	unsigned long start, end, len, offset, nElem, nIter;
+
+	nElem = US.nElem;
+	nIter = US.nIter;
+	offset = (unsigned long) arg;
+	len = (unsigned long) nElem / NUM_CPU_THREADS;
+	start = offset * len;
+	end = start + len;
+
+	unsigned long i, j;
+	float3 pos_i, accel_ip1, dpos_ip1;
+	float rDistSquared, MinvDistCubed;
+	float **i_r, **i_v, **i_a;
+	float **o_r, **o_v, **o_a;
+	for (unsigned long iter=0; iter<nIter; iter++) {
+
+		// since the computation cannot be done inplace, we constantly need to 
+		// swap where the input and output data locations are
+		if (iter % 2 == 0) {
+			i_r = &(US.r1);
+			i_v = &(US.v1);
+			i_a = &(US.a1);
+			o_r = &(US.r2);
+			o_v = &(US.v2);
+			o_a = &(US.a2);
+		} else {
+			i_r = &(US.r2);
+			i_v = &(US.v2);
+			i_a = &(US.a2);
+			o_r = &(US.r1);
+			o_v = &(US.v1);
+			o_a = &(US.a1);
+		}
+
+		// calculating NEXT position of each body
+		for (i=start; i<end; i++) {
+			if (i % 100 == 0) {
+				*(*o_r + (ND*i))   = *(*i_r + (ND*i));
+				*(*o_r + (ND*i+1)) = *(*i_r + (ND*i+1));
+				*(*o_r + (ND*i+2)) = *(*i_r + (ND*i+2));
+			} else {
+				*(*o_r + (ND*i))   = *(*i_r + (ND*i))   + *(*i_v + (ND*i))*DT   + *(*i_a + (ND*i))  *DTSQd2;
+				*(*o_r + (ND*i+1)) = *(*i_r + (ND*i+1)) + *(*i_v + (ND*i+1))*DT + *(*i_a + (ND*i+1))*DTSQd2;
+				*(*o_r + (ND*i+2)) = *(*i_r + (ND*i+2)) + *(*i_v + (ND*i+2))*DT + *(*i_a + (ND*i+2))*DTSQd2;
+			}
+		}
+
+		// position computation done
+		pthread_mutex_lock (&count_mutex);
+		count++;
+
+		if (count == NUM_CPU_THREADS*(2*iter+1)) {
+			pthread_cond_broadcast (&count_condition);
+			//printf("Broadcasting by tid=%ld\n", offset);
+		} else {
+			do {
+				pthread_cond_wait (&count_condition, &count_mutex);
+				//printf("Condition Broadcast received by tid=%ld\n", offset);
+			} while (count < NUM_CPU_THREADS*(2*iter+1));
+		}
+
+		pthread_mutex_unlock (&count_mutex);
+
+
+		// calculating NEXT acceleration of each body from the position of every other bodies
+		// ... and NEXT velocity of each body utilizing the next acceleration
+		for (i=start; i<end; i++) {
+			pos_i.x = *(*o_r + (ND*i+0));
+			pos_i.y = *(*o_r + (ND*i+1));
+			pos_i.z = *(*o_r + (ND*i+2));
+
+			accel_ip1 = (float3) {.x=0.0f, .y=0.0f, .z=0.0f};
+			
+
+			// unrolling this loop 8x for ~2% performance improvement
+			j = 0;
+			while (j < nElem) {
+				dpos_ip1.x = *(*o_r + (ND*j+0)) - pos_i.x;
+				dpos_ip1.y = *(*o_r + (ND*j+1)) - pos_i.y;
+				dpos_ip1.z = *(*o_r + (ND*j+2)) - pos_i.z;
+				rDistSquared = dpos_ip1.x*dpos_ip1.x + dpos_ip1.y*dpos_ip1.y + dpos_ip1.z*dpos_ip1.z + SOFTENING;
+				MinvDistCubed = US.m[j]/sqrtf(rDistSquared*rDistSquared*rDistSquared);
+				accel_ip1.x += dpos_ip1.x * MinvDistCubed;
+				accel_ip1.y += dpos_ip1.y * MinvDistCubed;
+				accel_ip1.z += dpos_ip1.z * MinvDistCubed;
+
+				j++; // unroll #1
+
+				dpos_ip1.x = *(*o_r + (ND*j+0)) - pos_i.x;
+				dpos_ip1.y = *(*o_r + (ND*j+1)) - pos_i.y;
+				dpos_ip1.z = *(*o_r + (ND*j+2)) - pos_i.z;
+				rDistSquared = dpos_ip1.x*dpos_ip1.x + dpos_ip1.y*dpos_ip1.y + dpos_ip1.z*dpos_ip1.z + SOFTENING;
+				MinvDistCubed = US.m[j]/sqrtf(rDistSquared*rDistSquared*rDistSquared);
+				accel_ip1.x += dpos_ip1.x * MinvDistCubed;
+				accel_ip1.y += dpos_ip1.y * MinvDistCubed;
+				accel_ip1.z += dpos_ip1.z * MinvDistCubed;
+
+				j++; // unroll #2
+
+				dpos_ip1.x = *(*o_r + (ND*j+0)) - pos_i.x;
+				dpos_ip1.y = *(*o_r + (ND*j+1)) - pos_i.y;
+				dpos_ip1.z = *(*o_r + (ND*j+2)) - pos_i.z;
+				rDistSquared = dpos_ip1.x*dpos_ip1.x + dpos_ip1.y*dpos_ip1.y + dpos_ip1.z*dpos_ip1.z + SOFTENING;
+				MinvDistCubed = US.m[j]/sqrtf(rDistSquared*rDistSquared*rDistSquared);
+				accel_ip1.x += dpos_ip1.x * MinvDistCubed;
+				accel_ip1.y += dpos_ip1.y * MinvDistCubed;
+				accel_ip1.z += dpos_ip1.z * MinvDistCubed;
+
+				j++; // unroll #3
+
+				dpos_ip1.x = *(*o_r + (ND*j+0)) - pos_i.x;
+				dpos_ip1.y = *(*o_r + (ND*j+1)) - pos_i.y;
+				dpos_ip1.z = *(*o_r + (ND*j+2)) - pos_i.z;
+				rDistSquared = dpos_ip1.x*dpos_ip1.x + dpos_ip1.y*dpos_ip1.y + dpos_ip1.z*dpos_ip1.z + SOFTENING;
+				MinvDistCubed = US.m[j]/sqrtf(rDistSquared*rDistSquared*rDistSquared);
+				accel_ip1.x += dpos_ip1.x * MinvDistCubed;
+				accel_ip1.y += dpos_ip1.y * MinvDistCubed;
+				accel_ip1.z += dpos_ip1.z * MinvDistCubed;
+
+				j++; // unroll #4
+
+				dpos_ip1.x = *(*o_r + (ND*j+0)) - pos_i.x;
+				dpos_ip1.y = *(*o_r + (ND*j+1)) - pos_i.y;
+				dpos_ip1.z = *(*o_r + (ND*j+2)) - pos_i.z;
+				rDistSquared = dpos_ip1.x*dpos_ip1.x + dpos_ip1.y*dpos_ip1.y + dpos_ip1.z*dpos_ip1.z + SOFTENING;
+				MinvDistCubed = US.m[j]/sqrtf(rDistSquared*rDistSquared*rDistSquared);
+				accel_ip1.x += dpos_ip1.x * MinvDistCubed;
+				accel_ip1.y += dpos_ip1.y * MinvDistCubed;
+				accel_ip1.z += dpos_ip1.z * MinvDistCubed;
+
+				j++; // unroll #5
+
+				dpos_ip1.x = *(*o_r + (ND*j+0)) - pos_i.x;
+				dpos_ip1.y = *(*o_r + (ND*j+1)) - pos_i.y;
+				dpos_ip1.z = *(*o_r + (ND*j+2)) - pos_i.z;
+				rDistSquared = dpos_ip1.x*dpos_ip1.x + dpos_ip1.y*dpos_ip1.y + dpos_ip1.z*dpos_ip1.z + SOFTENING;
+				MinvDistCubed = US.m[j]/sqrtf(rDistSquared*rDistSquared*rDistSquared);
+				accel_ip1.x += dpos_ip1.x * MinvDistCubed;
+				accel_ip1.y += dpos_ip1.y * MinvDistCubed;
+				accel_ip1.z += dpos_ip1.z * MinvDistCubed;
+
+				j++; // unroll #6
+
+				dpos_ip1.x = *(*o_r + (ND*j+0)) - pos_i.x;
+				dpos_ip1.y = *(*o_r + (ND*j+1)) - pos_i.y;
+				dpos_ip1.z = *(*o_r + (ND*j+2)) - pos_i.z;
+				rDistSquared = dpos_ip1.x*dpos_ip1.x + dpos_ip1.y*dpos_ip1.y + dpos_ip1.z*dpos_ip1.z + SOFTENING;
+				MinvDistCubed = US.m[j]/sqrtf(rDistSquared*rDistSquared*rDistSquared);
+				accel_ip1.x += dpos_ip1.x * MinvDistCubed;
+				accel_ip1.y += dpos_ip1.y * MinvDistCubed;
+				accel_ip1.z += dpos_ip1.z * MinvDistCubed;
+
+				j++; // unroll #7
+
+				dpos_ip1.x = *(*o_r + (ND*j+0)) - pos_i.x;
+				dpos_ip1.y = *(*o_r + (ND*j+1)) - pos_i.y;
+				dpos_ip1.z = *(*o_r + (ND*j+2)) - pos_i.z;
+				rDistSquared = dpos_ip1.x*dpos_ip1.x + dpos_ip1.y*dpos_ip1.y + dpos_ip1.z*dpos_ip1.z + SOFTENING;
+				MinvDistCubed = US.m[j]/sqrtf(rDistSquared*rDistSquared*rDistSquared);
+				accel_ip1.x += dpos_ip1.x * MinvDistCubed;
+				accel_ip1.y += dpos_ip1.y * MinvDistCubed;
+				accel_ip1.z += dpos_ip1.z * MinvDistCubed;
+
+				j++; // unroll #8
+			}
+			
+			*(*o_a + (ND*i+0)) = G*accel_ip1.x;
+			*(*o_a + (ND*i+1)) = G*accel_ip1.y;
+			*(*o_a + (ND*i+2)) = G*accel_ip1.z;
+
+			*(*o_v + (ND*i+0)) = *(*i_v + (ND*i+0)) + (*(*i_a + (ND*i+0))+accel_ip1.x)*DTd2;
+			*(*o_v + (ND*i+1)) = *(*i_v + (ND*i+1)) + (*(*i_a + (ND*i+1))+accel_ip1.y)*DTd2;
+			*(*o_v + (ND*i+2)) = *(*i_v + (ND*i+2)) + (*(*i_a + (ND*i+2))+accel_ip1.z)*DTd2;
+		}
+
+
+		// computation completed on thread. Acquire mutex to increment count variable...
+		pthread_mutex_lock (&count_mutex);
+		count++;
+
+		if (count == NUM_CPU_THREADS*(2*iter+2)) {
+			// writing to file
+			for (unsigned int idx=0; idx<nElem; idx++) {
+				fprintf(destFile, "%f,%f,%f\n", *(*o_r+ND*idx+0), *(*o_r+ND*idx+1), *(*o_r+ND*idx+2));
+			}
+
+			pthread_cond_broadcast (&count_condition);
+			//printf("Broadcasting by tid=%ld\n", offset);
+		} else {
+			do {
+				pthread_cond_wait (&count_condition, &count_mutex);
+				//printf("Condition Broadcast received by tid=%ld\n", offset);
+			} while (count < NUM_CPU_THREADS*(2*iter+2));
+		}
+
+		pthread_mutex_unlock (&count_mutex);
+
+		if (offset == 1) {
+			printf("%ld:\tx: %.6f\ty: %.6f\tz: %.6f\n",
+				iter, *(*o_r + (ND*offset)), *(*o_r + (ND*offset)+1), *(*o_r + (ND*offset)+2));
+		}
+
+		//if (offset == 0)
+		//	print_BodyStats (US.m, *o_r, *o_v, *o_a);
+	}
+
+	pthread_exit (NULL);
+}*/

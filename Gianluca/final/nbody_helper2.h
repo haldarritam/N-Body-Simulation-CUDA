@@ -27,9 +27,6 @@
 #define DTSQd2 0.00000190734f	// (time step squared) divided by 2
 #define DAMPENING 1.0f
 #define SOFTENING 1.0f
-#define UNROLL_LENGTH 16
-// #define checkCudaErrors(ans) { gpuAssert((ans), __FILE__, __LINE__); }
-
 #define checkCudaErrors(ans) { gpuAssert((ans), __FILE__, __LINE__); }
 inline void gpuAssert(cudaError_t code, const char *file, int line, bool abort=true)
 {
@@ -40,12 +37,17 @@ inline void gpuAssert(cudaError_t code, const char *file, int line, bool abort=t
    }
 }
 
-// typedef struct {
-// 	float4 *r[2];
-// 	float4 *v;
-// 	float4 *a;
-// 	unsigned long nElem, nIter;
-// } UNIVERSE;
+/*typedef struct {
+	float3 *r[2];
+	float3 *v;
+	float3 *a;
+	unsigned int nElem, nIter;
+} UNIVERSE;
+
+typedef struct {
+	unsigned int tid;
+	struct UNIVERSE *system;
+} THREAD_STRUCT;*/
 
 enum INIT_CONFIG {
 	RANDOM_SQUARE_NO_VEL,
@@ -74,5 +76,7 @@ __global__ void initAcceleration (float3 *devA, const float3 *__restrict__ devX,
 __device__ float3 calcAcceleration (const float3 *__restrict__ devX, const unsigned nTiles);
 __global__ void calcIntegration (float3 *devX_ip1, const float3 *__restrict__ devX_i,
 	float3 *devV_i, float3 *devA_i, const unsigned nElem, const unsigned nTiles);
+void *computeHost_SMT (void *arg);
 
 #endif
+
