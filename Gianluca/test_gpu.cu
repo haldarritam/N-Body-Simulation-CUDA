@@ -40,9 +40,9 @@ inline void gpuAssert(cudaError_t code, const char *file, int line, bool abort=t
 	}
 }
 
-// time stamp function in seconds 
+// time stamp function in seconds
 double getTimeStamp()
-{     
+{
 	struct timeval tv;
 	gettimeofday (&tv, NULL);
 	return (double) tv.tv_usec/1000000 + tv.tv_sec;
@@ -131,7 +131,7 @@ void init_MassPositionVelocity ()
 
 	// populating mass, position, & velocity arrays
 	unsigned long idx;
-	for (idx=0; idx<nElem; idx++) 
+	for (idx=0; idx<nElem; idx++)
 	{
 		US.m[idx]     = 100.0;//(float) ((double) rand() / (double) (RAND_MAX/MAX_MASS));
 		US.r1[2*idx]   = (float) ((double) rand() / (double) (RAND_MAX/(MAX_POS_X*2)) - MAX_POS_X);
@@ -186,8 +186,8 @@ void *init_Acceleration_SMT (void *arg)
 
 
 __global__ void compute_Device (
-	float *o_r, float *o_v, float *o_a, 
-	const float *i_r, const float *i_v, const float *i_a, 
+	float *o_r, float *o_v, float *o_a,
+	const float *i_r, const float *i_v, const float *i_a,
 	const float *m, const unsigned long nElem)
 {
 	unsigned long tid = blockIdx.x * blockDim.x + threadIdx.x;
@@ -262,7 +262,7 @@ int main (int argc, char *argv[])
 	printf("  Total amount of global memory: %.2f GB (%llu B)\n",
 		(float) deviceProp.totalGlobalMem/pow(1024.0,3),
 		(unsigned long long) deviceProp.totalGlobalMem);
-	printf("  Total amount of constant memory: %4.2f kB\n", 
+	printf("  Total amount of constant memory: %4.2f kB\n",
 		deviceProp.totalConstMem/1024.0);
 	printf("  Total amount of shared memory per block: %4.2f kB\n",
 		deviceProp.sharedMemPerBlock/1024.0);
@@ -282,7 +282,7 @@ int main (int argc, char *argv[])
 		deviceProp.maxGridSize[0], deviceProp.maxGridSize[1],
 		deviceProp.maxGridSize[2]);
 	printf("  Maximum memory pitch: %lu B\n", deviceProp.memPitch);
-	printf("  Memory Clock Rate (MHz): %.1f\n", 
+	printf("  Memory Clock Rate (MHz): %.1f\n",
 		deviceProp.memoryClockRate/1e3);
 	printf("  Memory Bus Width (b): %d\n", deviceProp.memoryBusWidth);
 	printf("  Peak Memory Bandwidth (GB/s): %.2f\n\n",
@@ -435,7 +435,7 @@ int main (int argc, char *argv[])
 	checkCudaErrors (cudaDeviceReset());
 	printf("Device successfully reset.\n");
 	printf("\nElapsed Time: %lfs\n", elapsedTime);
-	printf("Average timestep simulation duration: %lfs\n", elapsedTime/nIter); 
+	printf("Average timestep simulation duration: %lfs\n", elapsedTime/nIter);
 
 
 	free (h_m);

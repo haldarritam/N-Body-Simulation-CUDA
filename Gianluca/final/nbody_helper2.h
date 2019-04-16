@@ -13,7 +13,7 @@
 
 // global constants
 #define NUM_CPU_THREADS 32
-#define BLOCK_SIZE 1024
+#define BLOCK_SIZE 32
 #define ND 2				// number of spatial dimensions
 #define MIN_MASS 0.1f
 #define MAX_MASS 1.0f
@@ -30,7 +30,7 @@
 #define checkCudaErrors(ans) { gpuAssert((ans), __FILE__, __LINE__); }
 inline void gpuAssert(cudaError_t code, const char *file, int line, bool abort=true)
 {
-   if (code != cudaSuccess) 
+   if (code != cudaSuccess)
    {
       fprintf(stderr,"GPUassert: %s %s %d\n", cudaGetErrorString(code), file, line);
       if (abort) exit(code);

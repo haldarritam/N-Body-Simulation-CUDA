@@ -21,7 +21,7 @@
 #define MAX_MASS 1.0f
 #define MAX_POS 1000.0f
 #define X_RES 1920.0f
-#define Y_RES 1080.0f
+#define Y_RES 980.0f
 #define SIZE_OF_BODIES 0.9
 #define MAX_VEL 8192.0f
 #define G 80.0f
@@ -33,7 +33,7 @@
 #define checkCudaErrors(ans) { gpuAssert((ans), __FILE__, __LINE__); }
 inline void gpuAssert(cudaError_t code, const char *file, int line, bool abort=true)
 {
-   if (code != cudaSuccess) 
+   if (code != cudaSuccess)
    {
       fprintf(stderr,"GPUassert: %s %s %d\n", cudaGetErrorString(code), file, line);
       if (abort) exit(code);

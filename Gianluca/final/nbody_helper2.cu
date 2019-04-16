@@ -1,8 +1,8 @@
 #include "nbody_helper2.h"
 
-// time stamp function in seconds 
+// time stamp function in seconds
 double getTimeStamp()
-{     
+{
     struct timeval tv;
 	gettimeofday (&tv, NULL);
 	return (double) tv.tv_usec/1000000 + tv.tv_sec;
@@ -32,7 +32,7 @@ inline float normalize (float2 v0)
 		v0.x *= 1e6;
 		v0.y *= 1e6;
 	}
-	
+
 	return dist;
 }
 
@@ -80,8 +80,8 @@ inline float rand_sign ()
 // 			else
 // 				printf("%.2f\t", *(r+idx*(ND+1)+dim));
 // 		}
-// 	}	
-	
+// 	}
+
 // 	// print velocity
 // 	for (dim=0; dim<ND; dim++) {
 // 		for (unsigned long idx=0; idx<nElem; idx++) {
@@ -90,7 +90,7 @@ inline float rand_sign ()
 // 			else
 // 				printf("%.2f\t", v[ND*idx + dim]);
 // 		}
-// 	}	
+// 	}
 
 // 	// print acceleration
 // 	for (dim=0; dim<ND; dim++) {
@@ -100,7 +100,7 @@ inline float rand_sign ()
 // 			else
 // 				printf("%.2f\t", a[ND*idx + dim]);
 // 		}
-// 	}	
+// 	}
 // }
 
 void init_MassPositionVelocity (float3 *r, float3 *v, const unsigned long nElem, const unsigned int config)
@@ -216,7 +216,7 @@ void init_MassPositionVelocity (float3 *r, float3 *v, const unsigned long nElem,
 				unit_dist.x = dist.x / radius;
 				unit_dist.y = dist.y / radius;
 				tangential_speed = sqrtf(G*system_mass/radius) * 1.1;
-				
+
 				v[idx].x =    unit_dist.y * tangential_speed;
 				v[idx].y = -1*unit_dist.x * tangential_speed;
 				v[idx].z = 0.0f;
@@ -252,7 +252,7 @@ void init_MassPositionVelocity (float3 *r, float3 *v, const unsigned long nElem,
 				unit_dist.x = dist.x / radius;
 				unit_dist.y = dist.y / radius;
 				tangential_speed = sqrtf(G*system_mass/radius) * 1.1;
-				
+
 				v[idx].x =    unit_dist.y * tangential_speed;
 				v[idx].y = -1*unit_dist.x * tangential_speed;
 				v[idx].z = 0.0f;
@@ -288,7 +288,7 @@ void init_MassPositionVelocity (float3 *r, float3 *v, const unsigned long nElem,
 				unit_dist.x = dist.x / radius;
 				unit_dist.y = dist.y / radius;
 				tangential_speed = sqrtf(G*system_mass/radius) * 1.1;
-				
+
 				v[idx].x =    unit_dist.y * tangential_speed;
 				v[idx].y = -1*unit_dist.x * tangential_speed;
 				v[idx].z = 0.0f;
@@ -376,7 +376,7 @@ void print_deviceProperties (int dev, int driverVersion, int runtimeVersion, cud
 	printf("  Total amount of global memory: %.2f GB (%llu B)\n",
 		(float) deviceProp.totalGlobalMem/pow(1024.0,3),
 		(unsigned long long) deviceProp.totalGlobalMem);
-	printf("  Total amount of constant memory: %4.2f kB\n", 
+	printf("  Total amount of constant memory: %4.2f kB\n",
 		deviceProp.totalConstMem/1024.0);
 	printf("  Total amount of shared memory per block: %4.2f kB\n",
 		deviceProp.sharedMemPerBlock/1024.0);
@@ -396,7 +396,7 @@ void print_deviceProperties (int dev, int driverVersion, int runtimeVersion, cud
 		deviceProp.maxGridSize[0], deviceProp.maxGridSize[1],
 		deviceProp.maxGridSize[2]);
 	printf("  Maximum memory pitch: %lu B\n", deviceProp.memPitch);
-	printf("  Memory Clock Rate (MHz): %.1f\n", 
+	printf("  Memory Clock Rate (MHz): %.1f\n",
 		deviceProp.memoryClockRate/1e3);
 	printf("  Memory Bus Width (b): %d\n", deviceProp.memoryBusWidth);
 	printf("  Peak Memory Bandwidth (GB/s): %.2f\n\n",
@@ -406,15 +406,15 @@ void print_deviceProperties (int dev, int driverVersion, int runtimeVersion, cud
 __device__ float2 bodyBodyInteraction (float2 ai, const float3 bi, const float3 bj)
 {
 	float2 dist;
-	
+
 	dist.x = bj.x - bi.x;
 	dist.y = bj.y - bi.y;
-	
+
 	float distSqr = dist.x*dist.x + dist.y*dist.y + SOFTENING;
 	float invDistCube = rsqrtf(distSqr * distSqr * distSqr);
-	
+
 	float s = bj.z * invDistCube;
-	
+
 	ai.x += s * dist.x;
 	ai.y += s * dist.y;
 	return ai;
@@ -424,23 +424,23 @@ __global__ void initAcceleration (float3 *devA, const float3 *__restrict__ devX,
 {
 	unsigned int gtid = blockIdx.x * BLOCK_SIZE + threadIdx.x;
 	__shared__ float3 shPosition3[BLOCK_SIZE];
-	
+
 	float3 myPosition3;
 	float2 acc2 = {0.0f, 0.0f};
-	
+
 	myPosition3 = devX[gtid];
 	for (unsigned tile=0; tile<nTiles; tile++) {
 		shPosition3[threadIdx.x] = devX[ tile*BLOCK_SIZE + threadIdx.x ];
 		__syncthreads();	// Wait for all threads in block to load data
 							// ... into shared memory
-		#pragma unroll (16)
+		#pragma unroll (64)
 		for (unsigned j=0; j<BLOCK_SIZE; j++)
 			acc2 = bodyBodyInteraction(acc2, myPosition3, shPosition3[j]);
 
 		__syncthreads();	// wait for all threads in block to complete their
 							// ... computations to not overwrite sh. mem.
 	}
-	
+
 	devA[gtid] = (float3) {G*acc2.x, G*acc2.y, 0.0f};
 }
 
@@ -448,24 +448,24 @@ __device__ float3 calcAcceleration (const float3 *__restrict__ devX, const unsig
 {
 	unsigned int gtid = blockIdx.x * BLOCK_SIZE + threadIdx.x;
 	__shared__ float3 shPosition3[BLOCK_SIZE];
-	
+
 	float3 myPosition3;
 	float2 acc2 = {0.0f, 0.0f};
-	
+
 	myPosition3 = devX[gtid];
 	for (unsigned tile=0; tile<nTiles; tile++) {
 		shPosition3[threadIdx.x] = devX[ tile*BLOCK_SIZE + threadIdx.x ];
 		__syncthreads();	// Wait for all threads in block to load data
 							// ... into shared memory
 
-		#pragma unroll (16)
+		//#pragma unroll (32)
 		for (unsigned j=0; j<BLOCK_SIZE; j++)
 			acc2 = bodyBodyInteraction(acc2, myPosition3, shPosition3[j]);
-		
+
 		__syncthreads();	// wait for all threads in block to complete their
 							// ... computations to not overwrite sh. mem.
 	}
-	
+
 	float3 acc3 = {G*acc2.x, G*acc2.y, 0.0f};
 	return acc3;
 }
@@ -475,12 +475,12 @@ __global__ void calcIntegration (float3 *devX_ip1, const float3 *__restrict__ de
 {
 	unsigned int gtid = blockIdx.x * blockDim.x + threadIdx.x;
 	if (gtid < nElem) {
-		// if (gtid == 1) 
+		// if (gtid == 1)
 		// 	printf("x: %.6f\ty: %.6f\tm: %.6f\n", devX_i[gtid].x, devX_i[gtid].y, devX_i[gtid].z);
 		float3 old_acc = devA_i[gtid];
 		float3 old_vel = devV_i[gtid];
 		float3 old_pos = devX_i[gtid];
-		
+
 		devX_ip1[gtid].x = old_pos.x + old_vel.x*DT + old_acc.x*DTSQd2;
 		devX_ip1[gtid].y = old_pos.y + old_vel.y*DT + old_acc.y*DTSQd2;
 		float3 new_acc   = calcAcceleration (devX_i, nTiles);
@@ -509,7 +509,7 @@ __global__ void calcIntegration (float3 *devX_ip1, const float3 *__restrict__ de
 	float **o_r, **o_v, **o_a;
 	for (unsigned long iter=0; iter<nIter; iter++) {
 
-		// since the computation cannot be done inplace, we constantly need to 
+		// since the computation cannot be done inplace, we constantly need to
 		// swap where the input and output data locations are
 		if (iter % 2 == 0) {
 			i_r = &(US.r1);
@@ -565,7 +565,7 @@ __global__ void calcIntegration (float3 *devX_ip1, const float3 *__restrict__ de
 			pos_i.z = *(*o_r + (ND*i+2));
 
 			accel_ip1 = (float3) {.x=0.0f, .y=0.0f, .z=0.0f};
-			
+
 
 			// unrolling this loop 8x for ~2% performance improvement
 			j = 0;
@@ -658,7 +658,7 @@ __global__ void calcIntegration (float3 *devX_ip1, const float3 *__restrict__ de
 
 				j++; // unroll #8
 			}
-			
+
 			*(*o_a + (ND*i+0)) = G*accel_ip1.x;
 			*(*o_a + (ND*i+1)) = G*accel_ip1.y;
 			*(*o_a + (ND*i+2)) = G*accel_ip1.z;

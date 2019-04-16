@@ -9,7 +9,7 @@
 #include "nbody_helper2.h"
 
 std::vector<sf::CircleShape> body_graphics;
-
+const float PI = 3.1415926536;
 
 int main (int argc, char *argv[])
 {
@@ -28,9 +28,9 @@ int main (int argc, char *argv[])
 	if (argc > 1)	// no. of elements
 		nElem  = (unsigned int) strtoul(argv[1], &ptr1, 10);
 	if (argc > 2)	// initial config of bodies
-		config = (unsigned int) strtoul(argv[2], &ptr3, 10);
+		config = (unsigned int) strtoul(argv[2], &ptr2, 10);
 	if (argc > 3) {	// no. of iterations
-		nIter  = (unsigned int) strtoul(argv[3], &ptr2, 10);
+		nIter  = (unsigned int) strtoul(argv[3], &ptr3, 10);
 		limit_iter = true;
 	}
 
@@ -59,8 +59,10 @@ int main (int argc, char *argv[])
 	char char_buffer[20] = "Time per frame: 0\n";
 
 	sf::ContextSettings settings;
-	settings.antialiasingLevel = 8;
+	settings.antialiasingLevel = 16;
 	sf::RenderWindow window(sf::VideoMode(X_RES, Y_RES), "N-Body Simulation", sf::Style::Default, settings);
+	window.setActive(false);
+	window.setVerticalSyncEnabled(true);
 
 	sf::Font font;
 	if(!font.loadFromFile("./font/bignoodletitling/big_noodle_titling.ttf")) {
@@ -141,7 +143,6 @@ int main (int argc, char *argv[])
 	double timestamp_GPU_start = getTimeStamp();
 
 	unsigned iter=0, stop=0;
-	double time10, time11;
 
 	printf("Just Before while loop.\n");
 
@@ -157,9 +158,7 @@ int main (int argc, char *argv[])
 
 		checkCudaErrors (cudaStreamSynchronize (streams[1]));
 
-		time10 = getTimeStamp();
 		window.clear();
-		time11 = getTimeStamp();
 		#pragma unroll(16)
 		for (unsigned elem=0; elem<nElem; elem++) {
 			body_graphics[elem].setPosition(h_r[iter%2][elem].x, h_r[iter%2][elem].y);
@@ -180,8 +179,6 @@ int main (int argc, char *argv[])
 			if (event.type == sf::Event::Closed)
 				window.close();
 		}
-		printf("%.4fms\t%0.4fms\n",
-			(time11-time10)*1000, (getTimeStamp()-time11)*1000);
 
 		if (limit_iter && (iter == nIter)) {
 			stop = 1;
@@ -318,23 +315,31 @@ void init_MassPositionVelocity (float3 *r, float3 *v, const unsigned long nElem,
 	// populating mass, position, & velocity arrays
 	unsigned int idx;
 	float mass_range = MAX_MASS - MIN_MASS;
-	float x_width = 300.0;
-	float y_width = 300.0;
+	float x_width = X_RES/7;
+	float y_width = x_width;
 	float x_mid = X_RES/2+1;
 	float x_min = (X_RES - x_width)/2;
 	float y_mid = Y_RES/2+1;
 	float y_min = (Y_RES - y_width)/2;
 
-	float x, y, radius, angle, system_mass, speed_factor, tangential_speed;
+	float x, y, radius, angle, speed_factor, tangential_speed;
+	float system_mass1, system_mass2;
 	float shell_radius, shell_thickness, radial_velocity;
-	float2 CoM, dist, unit_dist;
+	float2 CoM1, CoM2, dist, unit_dist;
+	float galactic_speed = 100.0f;
 
 	// graphics variables
 	sf::CircleShape shape_green(SIZE_OF_BODIES);
 	shape_green.setFillColor(sf::Color::Green);
 
+	sf::CircleShape shape_green_big(2.5);
+	shape_green_big.setFillColor(sf::Color::Green);
+
 	sf::CircleShape shape_red(SIZE_OF_BODIES);
 	shape_red.setFillColor(sf::Color::Red);
+
+	sf::CircleShape shape_red_big(2.5);
+	shape_red_big.setFillColor(sf::Color::Red);
 
 	switch (config) {
 		case RANDOM_SQUARE_NO_VEL:
@@ -354,10 +359,11 @@ void init_MassPositionVelocity (float3 *r, float3 *v, const unsigned long nElem,
 		case RANDOM_CIRCLE_NO_VEL:
 			for (idx=0; idx<nElem; idx++) {
 				radius = (float) ((double) rand()/RAND_MAX) * y_width/2;
-				x = (float) ((double) rand()/RAND_MAX) * radius * rand_sign();
-				y = sqrt(radius*radius - x*x) * rand_sign();
+				angle = (float) ((double) rand()/RAND_MAX) * 2*PI;
+				x = (float) radius*cos(angle);
+				y = (float) radius*sin(angle);
 				r[idx].x = x_mid + x;
-				r[idx].y = y_mid + y;;
+				r[idx].y = y_mid + y;
 				r[idx].z = (float) ((double) rand()/RAND_MAX) * mass_range + MIN_MASS;
 				v[idx]   = (float3) {0.0f, 0.0f, 0.0f};
 				body_graphics.push_back(shape_green);
@@ -374,77 +380,97 @@ void init_MassPositionVelocity (float3 *r, float3 *v, const unsigned long nElem,
 		case EXPAND_SHELL:
 			shell_radius = y_width/2;
 			shell_thickness = 0.25*shell_radius;
-			CoM = (float2) {0.0f, 0.0f};
-			system_mass = 0.0;
-			speed_factor=0.1f;
+			CoM1 = (float2) {0.0f, 0.0f};
+			system_mass1 = 0.0;
+			speed_factor=0.4f;
 
 			for (idx=0; idx<nElem; idx++) {
-				// radius is the distance of point from center of window
-				radius = (float) ((double) rand()/RAND_MAX)*shell_thickness - shell_thickness/2 + shell_radius;
-				x = (float) ((double) rand()/RAND_MAX) * radius * rand_sign();
-				y = sqrt(radius*radius - x*x) * rand_sign();
-				r[idx].x = x_mid + x;
-				r[idx].y = y_mid + y;;
-				r[idx].z = (float) ((double) rand()/RAND_MAX) * mass_range + MIN_MASS;
-				CoM.x += r[idx].z * r[idx].x;
-				CoM.y += r[idx].z * r[idx].y;
-				system_mass += r[idx].z;
+				if (idx == 0) {
+					r[idx].x = X_RES/2;
+					r[idx].y = Y_RES/2;
+					r[idx].z = ((float) ((double) rand()/RAND_MAX) * mass_range + MIN_MASS)*100000;
+				} else {
+					// radius is the distance of point from center of window
+					radius = (float) ((double) rand()/RAND_MAX)*shell_thickness - shell_thickness/2 + shell_radius;
+					angle = (float) ((double) rand()/RAND_MAX) * 2*PI;
+					x = (float) radius*cos(angle);
+					y = (float) radius*sin(angle);
+					r[idx].x = x_mid + x;
+					r[idx].y = y_mid + y;
+					r[idx].z = (float) ((double) rand()/RAND_MAX) * mass_range + MIN_MASS;
+				}
+				CoM1.x += r[idx].z * r[idx].x;
+				CoM1.y += r[idx].z * r[idx].y;
+				system_mass1 += r[idx].z;
 				body_graphics.push_back(shape_green);
 				body_graphics[idx].setPosition(r[idx].x, r[idx].y);
 			}
 
-			CoM.x /= system_mass;
-			CoM.y /= system_mass;
+			CoM1.x /= system_mass1;
+			CoM1.y /= system_mass1;
 
 			for (idx=0; idx<nElem; idx++) {
-				// radius is now the distance of point from Center of Mass (CoM)
-				dist.x = r[idx].x - CoM.x;
-				dist.y = r[idx].y - CoM.y;
-				angle = (float) atan(dist.y/dist.x);
-				radius = sqrtf(dist.x*dist.x + dist.y*dist.y);
-				radial_velocity = speed_factor * sqrtf(2*G*system_mass/radius);
-				v[idx].x = radial_velocity * (float) cos(angle);
-				v[idx].y = radial_velocity * (float) sin(angle);
-				v[idx].z = 0.0f;
+				if (idx == 0) {
+					v[idx].x = 0.0f;
+					v[idx].y = 0.0f;
+					v[idx].z = 0.0f;
+				} else {
+					// radius is now the distance of point from Center of Mass (CoM1)
+					dist.x = r[idx].x - CoM1.x;
+					dist.y = r[idx].y - CoM1.y;
+					angle = atan(dist.y/dist.x);
+					radius = sqrtf(dist.x*dist.x + dist.y*dist.y);
+					radial_velocity = speed_factor * sqrtf(2*G*system_mass1/radius);
+
+					if (dist.x >= 0) v[idx].x = 1*radial_velocity * cos(angle);
+					else v[idx].x = -1*radial_velocity * cos(angle);
+
+					if (dist.y >= 0) v[idx].y = 1*radial_velocity * abs(sin(angle));
+					else v[idx].y = -1*radial_velocity * abs(sin(angle));
+
+					printf("dist.x: %.2f\tdist.y: %.2f\tangle: %.2f\tcos(): %.2f\tsin(): %.2f\n",
+						dist.x, dist.y, angle/PI*180, cos(angle), sin(angle));
+					v[idx].z = 0.0f;
+				}
 			}
 			break;
 
 		case SPIRAL_SINGLE_GALAXY:
-			CoM = (float2) {0.0f, 0.0f};
-			system_mass = 0.0;
+			CoM1 = (float2) {0.0f, 0.0f};
+			system_mass1 = 0.0;
 			for (idx=0; idx<nElem; idx++) {
 				if (idx == 0) {
-					r[idx].x = 960;
-					r[idx].y = 540;
+					r[idx].x = X_RES/2;
+					r[idx].y = Y_RES/2;
 					r[idx].z = ((float) ((double) rand()/RAND_MAX) * mass_range + MIN_MASS)*100000;
 				} else {
 					r[idx].x = (float) ((double) rand()/RAND_MAX) * x_width + x_min;
 					r[idx].y = (float) ((double) rand()/RAND_MAX) * y_width + y_min;
 					r[idx].z = (float) ((double) rand()/RAND_MAX) * mass_range + MIN_MASS;
 				}
-				CoM.x += r[idx].z * r[idx].x;
-				CoM.y += r[idx].z * r[idx].y;
-				system_mass += r[idx].z;
+				CoM1.x += r[idx].z * r[idx].x;
+				CoM1.y += r[idx].z * r[idx].y;
+				system_mass1 += r[idx].z;
 				body_graphics.push_back(shape_green);
 				body_graphics[idx].setPosition(r[idx].x, r[idx].y);
 			}
 
-			CoM.x /= system_mass;
-			CoM.y /= system_mass;
+			CoM1.x /= system_mass1;
+			CoM1.y /= system_mass1;
 
 			for (idx=0; idx<nElem; idx++) {
-				// radius is now the distance of point from Center of Mass (CoM)
+				// radius is now the distance of point from Center of Mass (CoM1)
 				if (idx == 0) {
 					v[idx].x = 0.0f;
 					v[idx].y = 0.0f;
 					v[idx].z = 0.0f;
 				} else {
-					dist.x = r[idx].x - CoM.x;
-					dist.y = r[idx].y - CoM.y;
+					dist.x = r[idx].x - CoM1.x;
+					dist.y = r[idx].y - CoM1.y;
 					radius = sqrtf(dist.x*dist.x + dist.y*dist.y);
 					unit_dist.x = dist.x / radius;
 					unit_dist.y = dist.y / radius;
-					tangential_speed = sqrtf(G*system_mass/radius) * 0.8f;
+					tangential_speed = sqrtf(G*system_mass1/radius) * 0.8f;
 
 					v[idx].x =    unit_dist.y * tangential_speed;
 					v[idx].y = -1*unit_dist.x * tangential_speed;
@@ -454,44 +480,93 @@ void init_MassPositionVelocity (float3 *r, float3 *v, const unsigned long nElem,
 			break;
 
 		case SPIRAL_DOUBLE_GALAXY:
-			CoM = (float2) {0.0f, 0.0f};
-			system_mass = 0.0;
+			CoM1 = (float2) {0.0f, 0.0f};
+			CoM2 = (float2) {0.0f, 0.0f};
+			system_mass1 = 0.0f;
+			system_mass2 = 0.0f;
 			for (idx=0; idx<nElem; idx++) {
-				if (idx == 0) {
-					r[idx].x = x_mid;
-					r[idx].y = y_mid;
-					r[idx].z = ((float) (rand()/RAND_MAX) * mass_range + MIN_MASS)*10000;
+				if (idx % (nElem/2) == 0) {
+					r[idx].x = X_RES/2;
+					r[idx].y = Y_RES/2;
+					r[idx].z = ((float) ((double) rand()/RAND_MAX) * mass_range + MIN_MASS)*100000;
 				} else {
-					r[idx].x = (float) (rand()/RAND_MAX) * x_width + x_min;
-					r[idx].y = (float) (rand()/RAND_MAX) * y_width + y_min;
-					r[idx].z = (float) (rand()/RAND_MAX) * mass_range + MIN_MASS;
+					r[idx].x = (float) ((double) rand()/RAND_MAX) * x_width + x_min;
+					r[idx].y = (float) ((double) rand()/RAND_MAX) * y_width + y_min;
+					r[idx].z = (float) ((double) rand()/RAND_MAX) * mass_range + MIN_MASS;
 				}
-				CoM.x += r[idx].z * r[idx].x;
-				CoM.y += r[idx].z * r[idx].y;
-				system_mass += r[idx].z;
+
+				if (idx < (nElem/2)) {
+					system_mass1 += r[idx].z;
+					CoM1.x += r[idx].z * r[idx].x;
+					CoM1.y += r[idx].z * r[idx].y;
+				} else {
+					system_mass2 += r[idx].z;
+					CoM2.x += r[idx].z * r[idx].x;
+					CoM2.y += r[idx].z * r[idx].y;
+				}
 			}
 
-			CoM.x /= system_mass;
-			CoM.y /= system_mass;
+
+			CoM1.x /= system_mass1;
+			CoM1.y /= system_mass1;
+
+			CoM2.x /= system_mass2;
+			CoM2.y /= system_mass2;
 
 			for (idx=0; idx<nElem; idx++) {
-				// radius is now the distance of point from Center of Mass (CoM)
-				dist.x = r[idx].x - CoM.x;
-				dist.y = r[idx].y - CoM.y;
-				radius = sqrtf(dist.x*dist.x + dist.y*dist.y);
-				unit_dist.x = dist.x / radius;
-				unit_dist.y = dist.y / radius;
-				tangential_speed = sqrtf(G*system_mass/radius) * 1.1;
+				// radius is now the distance of point from Center of Mass (CoM1)
+				if (idx % (nElem/2) == 0) {
+					v[idx].x = 0.0f;
+					v[idx].y = 0.0f;
+					v[idx].z = 0.0f;
+				} else {
+					if (idx < (nElem/2)) {
+						dist.x = r[idx].x - CoM1.x;
+						dist.y = r[idx].y - CoM1.y;
+						radius = sqrtf(dist.x*dist.x + dist.y*dist.y);
+						unit_dist.x = dist.x / radius;
+						unit_dist.y = dist.y / radius;
+						tangential_speed = sqrtf(G*system_mass1/radius) * 0.7f;
+						v[idx].x =    unit_dist.y * tangential_speed;
+						v[idx].y = -1*unit_dist.x * tangential_speed;
+						v[idx].z = 0.0f;
+					} else {
+						dist.x = r[idx].x - CoM2.x;
+						dist.y = r[idx].y - CoM2.y;
+						radius = sqrtf(dist.x*dist.x + dist.y*dist.y);
+						unit_dist.x = dist.x / radius;
+						unit_dist.y = dist.y / radius;
+						tangential_speed = sqrtf(G*system_mass2/radius) * 0.7f;
+						v[idx].x =    unit_dist.y * tangential_speed;
+						v[idx].y = -1*unit_dist.x * tangential_speed;
+						v[idx].z = 0.0f;
+					}
+				}
+			}
 
-				v[idx].x =    unit_dist.y * tangential_speed;
-				v[idx].y = -1*unit_dist.x * tangential_speed;
-				v[idx].z = 0.0f;
+			for (idx=0; idx<nElem; idx++) {
+				if (idx < (nElem/2)) {
+					r[idx].x += x_mid/5;
+					v[idx].y += galactic_speed*1.0;
+					if (idx % (nElem/2) == 0)
+						body_graphics.push_back(shape_green_big);
+					else
+						body_graphics.push_back(shape_green);
+				} else {
+					r[idx].x -= x_mid/4;
+					v[idx].y -= galactic_speed*0.4;
+					if (idx % (nElem/2) == 0)
+						body_graphics.push_back(shape_red_big);
+					else
+						body_graphics.push_back(shape_red);
+				}
+				body_graphics[idx].setPosition(r[idx].x, r[idx].y);
 			}
 			break;
 
 		case SPIRAL_QUAD_GALAXY:
-			CoM = (float2) {0.0f, 0.0f};
-			system_mass = 0.0;
+			CoM1 = (float2) {0.0f, 0.0f};
+			system_mass1 = 0.0;
 			for (idx=0; idx<nElem; idx++) {
 				if (idx == 0) {
 					r[idx].x = x_mid;
@@ -502,22 +577,22 @@ void init_MassPositionVelocity (float3 *r, float3 *v, const unsigned long nElem,
 					r[idx].y = (float) (rand()/RAND_MAX) * y_width + y_min;
 					r[idx].z = (float) (rand()/RAND_MAX) * mass_range + MIN_MASS;
 				}
-				CoM.x += r[idx].z * r[idx].x;
-				CoM.y += r[idx].z * r[idx].y;
-				system_mass += r[idx].z;
+				CoM1.x += r[idx].z * r[idx].x;
+				CoM1.y += r[idx].z * r[idx].y;
+				system_mass1 += r[idx].z;
 			}
 
-			CoM.x /= system_mass;
-			CoM.y /= system_mass;
+			CoM1.x /= system_mass1;
+			CoM1.y /= system_mass1;
 
 			for (idx=0; idx<nElem; idx++) {
-				// radius is now the distance of point from Center of Mass (CoM)
-				dist.x = r[idx].x - CoM.x;
-				dist.y = r[idx].y - CoM.y;
+				// radius is now the distance of point from Center of Mass (CoM1)
+				dist.x = r[idx].x - CoM1.x;
+				dist.y = r[idx].y - CoM1.y;
 				radius = sqrtf(dist.x*dist.x + dist.y*dist.y);
 				unit_dist.x = dist.x / radius;
 				unit_dist.y = dist.y / radius;
-				tangential_speed = sqrtf(G*system_mass/radius) * 1.1;
+				tangential_speed = sqrtf(G*system_mass1/radius) * 1.1;
 
 				v[idx].x =    unit_dist.y * tangential_speed;
 				v[idx].y = -1*unit_dist.x * tangential_speed;
@@ -531,7 +606,7 @@ void init_MassPositionVelocity (float3 *r, float3 *v, const unsigned long nElem,
 				x = (float) (rand()/RAND_MAX) * radius * rand_sign();
 				y = sqrt(radius*radius - x*x) * rand_sign();
 				r[idx].x = x_mid + x;
-				r[idx].y = y_mid + y;;
+				r[idx].y = y_mid + y;
 				r[idx].z = (float) (rand()/RAND_MAX) * mass_range + MIN_MASS;
 				v[idx]   = (float3) {0.0f, 0.0f, 0.0f};
 			}
