@@ -14,7 +14,7 @@
 #include <SFML/Graphics.hpp>
 
 // global constants
-#define NUM_CPU_THREADS 2
+#define NUM_CPU_THREADS 32
 #define BLOCK_SIZE 1024
 #define ND 2				// number of spatial dimensions
 #define MIN_MASS 0.1f
@@ -28,8 +28,8 @@
 #define DT 0.0019531255f		// time step
 #define DTd2 0.0009765625f		// (time step) divided by 2
 #define DTSQd2 0.00000190734f	// (time step squared) divided by 2
-#define DAMPENING 1.0f
-#define SOFTENING 1.0f
+#define DAMPENING 0.99f
+#define SOFTENING 0.1f
 #define checkCudaErrors(ans) { gpuAssert((ans), __FILE__, __LINE__); }
 inline void gpuAssert(cudaError_t code, const char *file, int line, bool abort=true)
 {

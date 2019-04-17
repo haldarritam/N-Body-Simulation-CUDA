@@ -547,14 +547,14 @@ void init_MassPositionVelocity (float3 *r, float3 *v, const unsigned long nElem,
 			for (idx=0; idx<nElem; idx++) {
 				if (idx < (nElem/2)) {
 					r[idx].x += x_mid/5;
-					v[idx].y += galactic_speed*1.0;
+					v[idx].y += galactic_speed*0.5;
 					if (idx % (nElem/2) == 0)
 						body_graphics.push_back(shape_green_big);
 					else
 						body_graphics.push_back(shape_green);
 				} else {
 					r[idx].x -= x_mid/4;
-					v[idx].y -= galactic_speed*0.4;
+					v[idx].y -= galactic_speed*0.5;
 					if (idx % (nElem/2) == 0)
 						body_graphics.push_back(shape_red_big);
 					else

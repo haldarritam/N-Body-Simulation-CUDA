@@ -256,21 +256,19 @@ void *computeHost_SMT (void *arg)
 
 	    // calculating NEXT acceleration of each body from the position of every other bodies
 	    // ... and NEXT velocity of each body utilizing the next acceleration
+        #pragma GCC unroll 32
 	    for (i=start; i<end; i++)
 	    {
 	        ax_ip1 = 0.0;
 	        ay_ip1 = 0.0;
 	        for (j=0; j<nElem; j++)
 	        {
-	            if (j != i)
-	            {
-	                dx_ip1 = *(*o_r + (2*j))   - *(*o_r + (2*i));
-	                dy_ip1 = *(*o_r + (2*j+1)) - *(*o_r + (2*i+1));
-	                rDistSquared = dx_ip1*dx_ip1 + dy_ip1*dy_ip1 + SOFTENING;
-	                invDistCubed = G*US.m[j]/sqrtf(rDistSquared*rDistSquared*rDistSquared);
-	                ax_ip1 += dx_ip1 * invDistCubed;
-	                ay_ip1 += dy_ip1 * invDistCubed;
-	            }
+				dx_ip1 = *(*o_r + (2*j))   - *(*o_r + (2*i));
+				dy_ip1 = *(*o_r + (2*j+1)) - *(*o_r + (2*i+1));
+				rDistSquared = dx_ip1*dx_ip1 + dy_ip1*dy_ip1 + SOFTENING;
+				invDistCubed = G*US.m[j]/sqrtf(rDistSquared*rDistSquared*rDistSquared);
+				ax_ip1 += dx_ip1 * invDistCubed;
+				ay_ip1 += dy_ip1 * invDistCubed;
 	        }
 	        *(*o_a + (2*i))   = ax_ip1;
 	        *(*o_a + (2*i+1)) = ay_ip1;
@@ -297,9 +295,9 @@ void *computeHost_SMT (void *arg)
 
 		pthread_mutex_unlock (&count_mutex);
 
-        if (offset == 0) {
-            printf("x: %.6f\ty: %.6f\n", **o_r, *(*o_r+1));
-        }
+        // if (offset == 0) {
+        //     printf("x: %.6f\ty: %.6f\n", **o_r, *(*o_r+1));
+        // }
 
 		// if ((offset == 0) && (iter%1000 == 0)) {
   //           print_BodyStats (iter+1);
